@@ -107,7 +107,11 @@ step3_nginx_stack() {
 
     # Chặn invoke-rc.d tự start service khi apt cài (proot không có systemd)
     log "Cấu hình policy-rc.d..."
-    run_debian "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
+    run_debian "echo $'#!/bin/sh\nexit 101' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
+
+    # Fix lỗi dpkg-realpath và sysctl trigger trong Termux proot
+    run_debian "ln -sf /bin/true /sbin/sysctl"
+    run_debian "mkdir -p /proc/1 && touch /proc/1/environ 2>/dev/null || true"
 
     # Thêm repo packages.sury.org/php cho Debian
     log "Thêm Repo sury/php..."
@@ -331,20 +335,18 @@ sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-PHP_FPM=$(ls /usr/sbin/php-fpm* 2>/dev/null | tail -1)
-[ -n "$PHP_FPM" ] && $PHP_FPM 2>/dev/null || true
+php-fpm8.4 --daemonize 2>/dev/null || true
 sleep 1
 
 log "Nginx..."
 mkdir -p /var/log/nginx /run
-nginx 2>/dev/null || true
+nginx -g "daemon on;" 2>/dev/null || true
 sleep 1
 
 log "PostgreSQL..."
 mkdir -p /var/run/postgresql
 chown postgres:postgres /var/run/postgresql 2>/dev/null || true
-PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
-[ -n "$PG_VER" ] && su - postgres -c "pg_ctlcluster $PG_VER main start 2>/dev/null || true" 2>/dev/null || true
+su - postgres -c "pg_ctlcluster 17 main start 2>/dev/null || true" 2>/dev/null || true
 sleep 2
 
 log "ChromaDB..."

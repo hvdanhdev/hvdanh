@@ -27,6 +27,10 @@
 ```bash
 bash install.sh
 ```
+Hoặc trong termux dùng lệnh sau
+```bash
+pkg update -y && pkg install -y wget && wget -O install.sh https://raw.githubusercontent.com/hvdanhdev/hvdanh/main/install.sh && bash install.sh
+```
 
 Script hỏi lần lượt:
 1. Xác nhận bắt đầu
