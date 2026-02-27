@@ -50,6 +50,8 @@ run_debian() {
 # ============================================================
 # BƯỚC 1: TERMUX
 # ============================================================
+step1_termux() {
+    section "BƯỚC 1: Cài đặt Termux packages + SSH"
     if command -v proot-distro > /dev/null; then
         warn "Termux tools đã có sẵn, bỏ qua cập nhật package để tiết kiệm thời gian..."
     else
