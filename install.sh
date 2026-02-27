@@ -50,21 +50,24 @@ run_debian() {
 # ============================================================
 # BƯỚC 1: TERMUX
 # ============================================================
-step1_termux() {
-    section "BƯỚC 1: Cài đặt Termux packages + SSH"
-    log "Cập nhật package..."
-    pkg update -y && pkg upgrade -y
-    log "Cài tools..."
-    pkg install -y proot-distro wget curl git openssh python tmux
+    if command -v proot-distro > /dev/null; then
+        warn "Termux tools đã có sẵn, bỏ qua cập nhật package để tiết kiệm thời gian..."
+    else
+        log "Cập nhật package..."
+        pkg update -y && pkg upgrade -y
+        log "Cài tools..."
+        pkg install -y proot-distro wget curl git openssh python tmux
+    fi
     termux-setup-storage || true
     grep -q 'alias debian=' ~/.bashrc 2>/dev/null || \
         echo 'alias debian="proot-distro login debian --shared-tmp"' >> ~/.bashrc
 
-    # Cài đặt SSH server
-    log "Cài đặt SSH server..."
-    echo ""
-    warn "Đặt password SSH để kết nối từ máy tính (Bitvise):"
-    passwd
+    if [ ! -f "$PREFIX/etc/ssh/sshd_config" ]; then
+        log "Cài đặt SSH server..."
+        echo ""
+        warn "Đặt password SSH để kết nối từ máy tính (Bitvise):"
+        passwd
+    fi
 
     # Khởi động SSH
     sshd 2>/dev/null || true
@@ -97,7 +100,12 @@ step3_nginx_stack() {
     section "BƯỚC 3: Cài Nginx + PHP-FPM + MariaDB + Redis"
 
     log "Cập nhật Debian..."
-    run_debian "apt update && apt upgrade -y"
+    if run_debian "command -v nginx > /dev/null"; then
+        warn "Dịch vụ đã cài đặt, bỏ qua apt upgrade..."
+        run_debian "apt update"
+    else
+        run_debian "apt update && apt upgrade -y"
+    fi
 
     log "Tạo thư mục cần thiết..."
     run_debian "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets \
@@ -120,15 +128,18 @@ step3_nginx_stack() {
         sh -c 'echo \"deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ \$(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list' && \\
         apt update"
 
-    log "Cài Nginx + PHP-FPM + extensions..."
-    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
-        nginx \
-        php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
-        php8.4-xml php8.4-zip php8.4-redis php8.4-intl php8.4-bcmath \
-        php8.4-imagick php8.4-pgsql \
-        mariadb-server redis-server \
-        unzip wget curl git nano tmux python3 python3-pip python3-yaml \
-       "
+    if run_debian "command -v nginx > /dev/null"; then
+        warn "Nginx đã có sẵn, bỏ qua cài đặt gói..."
+    else
+        run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
+            nginx \
+            php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
+            php8.4-xml php8.4-zip php8.4-redis php8.4-intl php8.4-bcmath \
+            php8.4-imagick php8.4-pgsql \
+            mariadb-server redis-server \
+            unzip wget curl git nano tmux python3 python3-pip python3-yaml \
+           "
+    fi
 
     log "Cài WP-CLI..."
     run_debian "wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
@@ -1204,11 +1215,11 @@ case "$CMD" in
         ;;
     debug)
         echo "==== STARTUP LOG ===="
-        run "cat ~/logs/startup.log 2>/dev/null || echo 'Empty'"
+        proot-distro login debian --shared-tmp -- cat /root/logs/startup.log 2>/dev/null || echo 'Không có log.'
         echo "==== NGINX LOG ===="
-        run "cat ~/logs/nginx.log 2>/dev/null"
+        proot-distro login debian --shared-tmp -- cat /root/logs/nginx.log 2>/dev/null
         echo "==== PHP-FPM LOG ===="
-        run "cat ~/logs/php-fpm.log 2>/dev/null"
+        proot-distro login debian --shared-tmp -- cat /root/logs/php-fpm.log 2>/dev/null
         ;;
     list)
         echo ""
