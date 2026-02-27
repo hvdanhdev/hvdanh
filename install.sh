@@ -329,24 +329,24 @@ sleep 3
 log "Redis..."
 mkdir -p /var/log/redis /var/run/redis
 chown -R redis:redis /var/log/redis /var/run/redis 2>/dev/null || true
-redis-server /etc/redis/redis.conf --daemonize yes 2>/dev/null || \
-    redis-server --daemonize yes --loglevel warning 2>/dev/null || true
+redis-server /etc/redis/redis.conf --daemonize yes >> ~/logs/startup.log 2>&1 || \
+    redis-server --daemonize yes --loglevel warning >> ~/logs/startup.log 2>&1 || true
 sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-php-fpm8.4 --daemonize 2>/dev/null || true
+php-fpm8.4 --daemonize >> ~/logs/startup.log 2>&1 || true
 sleep 1
 
 log "Nginx..."
 mkdir -p /var/log/nginx /run
-nginx -g "daemon on;" 2>/dev/null || true
+nginx -g "daemon on;" >> ~/logs/startup.log 2>&1 || true
 sleep 1
 
 log "PostgreSQL..."
 mkdir -p /var/run/postgresql
 chown postgres:postgres /var/run/postgresql 2>/dev/null || true
-su - postgres -c "pg_ctlcluster 17 main start 2>/dev/null || true" 2>/dev/null || true
+su - postgres -c "pg_ctlcluster 17 main start >> ~/logs/startup.log 2>&1 || true" >> ~/logs/startup.log 2>&1 || true
 sleep 2
 
 log "ChromaDB..."
@@ -612,11 +612,11 @@ while true; do
         redis-cli flushall 2>/dev/null || true
     fi
 
-    check_restart "Nginx"      "pgrep nginx"       "nginx -g 'daemon on;' 2>/dev/null"
-    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.4 --daemonize 2>/dev/null"
+    check_restart "Nginx"      "pgrep nginx"       "nginx -g 'daemon on;' >> ~/logs/startup.log 2>&1"
+    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.4 --daemonize >> ~/logs/startup.log 2>&1"
     check_restart "MariaDB"    "pgrep mysqld"      "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
-    check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize yes 2>/dev/null"
-    check_restart "PostgreSQL" "pgrep postgres"    "su - postgres -c \"pg_ctlcluster 17 main start\" 2>/dev/null"
+    check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize yes >> ~/logs/startup.log 2>&1"
+    check_restart "PostgreSQL" "pgrep postgres"    "su - postgres -c \"pg_ctlcluster 17 main start\" >> ~/logs/startup.log 2>&1"
     check_restart "ChromaDB"   "pgrep -f chroma"   "nohup chroma run --host 127.0.0.1 --port 8000 >> ~/logs/chromadb.log 2>&1 &"
     check_restart "Cloudflare" "pgrep cloudflared" "nohup cloudflared tunnel run $TUNNEL_NAME >> ~/logs/cloudflared.log 2>&1 &"
 
