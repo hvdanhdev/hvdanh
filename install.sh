@@ -615,7 +615,7 @@ while true; do
     check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.4 -F > ~/logs/php-fpm.log 2>&1 &"
     check_restart "MariaDB"    "pgrep mysqld"      "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
     check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize no > ~/logs/redis.log 2>&1 &"
-    check_restart "PostgreSQL" "pgrep postgres"    "su - postgres -c \"pg_ctlcluster 17 main start >> ~/logs/startup.log 2>&1 || true\" >> ~/logs/startup.log 2>&1 || true"
+    check_restart "PostgreSQL" "pgrep postgres"    "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start >> ~/logs/startup.log 2>&1 || true\" >> ~/logs/startup.log 2>&1 || true"
     check_restart "ChromaDB"   "pgrep -f chroma"   "nohup chroma run --host 127.0.0.1 --port 8000 >> ~/logs/chromadb.log 2>&1 &"
     check_restart "Cloudflare" "pgrep cloudflared" "nohup cloudflared tunnel run $TUNNEL_NAME >> ~/logs/cloudflared.log 2>&1 &"
 
