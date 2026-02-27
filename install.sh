@@ -108,12 +108,19 @@ step3_nginx_stack() {
     # Chặn invoke-rc.d tự start service khi apt cài (proot không có systemd)
     log "Cấu hình policy-rc.d..."
     run_ubuntu "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
+
+    # Thêm PPA ondrej/php để có đầy đủ PHP extensions trên Ubuntu mới
+    log "Thêm PPA ondrej/php..."
+    run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common && \
+        add-apt-repository -y ppa:ondrej/php && \
+        apt update"
+
     log "Cài Nginx + PHP-FPM + extensions..."
     run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y \
         nginx \
-        php8.3-fpm php8.3-mysql php8.3-curl php8.3-gd php8.3-mbstring \
-        php8.3-xml php8.3-zip php8.3-redis php8.3-intl php8.3-bcmath \
-        php8.3-imagick php8.3-pgsql \
+        php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
+        php8.4-xml php8.4-zip php8.4-redis php8.4-intl php8.4-bcmath \
+        php8.4-imagick php8.4-pgsql \
         mariadb-server redis-server \
         unzip wget curl git nano tmux python3 python3-pip python3-yaml \
        "
@@ -167,7 +174,7 @@ http {
 NGINX"
 
     log "Cấu hình PHP-FPM..."
-    run_ubuntu "sed -i 's/^listen = .*/listen = \/run\/php\/php8.3-fpm.sock/' \
+    run_ubuntu "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
     run_ubuntu "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
@@ -304,15 +311,14 @@ step7_scripts() {
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source ~/.vps_config 2>/dev/null || true
 
-GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[✓]${NC} $1"; }
-err() { echo -e "${RED}[✗]${NC} $1"; }
 
 log "MariaDB..."
 pkill -f mysqld 2>/dev/null; sleep 1
 mkdir -p /var/run/mysqld /var/log/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql 2>/dev/null || true
-mysqld --user=mysql --skip-networking=0 > /var/log/mysql/error.log 2>&1 &
+mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &
 sleep 3
 
 log "Redis..."
@@ -324,7 +330,8 @@ sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-php-fpm8.3 2>/dev/null || true
+PHP_FPM=$(ls /usr/sbin/php-fpm* 2>/dev/null | tail -1)
+[ -n "$PHP_FPM" ] && $PHP_FPM 2>/dev/null || true
 sleep 1
 
 log "Nginx..."
@@ -340,12 +347,10 @@ PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 sleep 2
 
 log "ChromaDB..."
-pkill -f chroma 2>/dev/null || true
 nohup chroma run --host 127.0.0.1 --port 8000 > ~/logs/chromadb.log 2>&1 &
 sleep 2
 
 log "Cloudflare Tunnel..."
-pkill -f cloudflared 2>/dev/null || true
 nohup cloudflared tunnel run $TUNNEL_NAME > ~/logs/cloudflared.log 2>&1 &
 sleep 2
 
@@ -605,10 +610,10 @@ while true; do
     fi
 
     check_restart "Nginx"      "pgrep nginx"       "nginx 2>/dev/null"
-    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.3 2>/dev/null"
+    check_restart "PHP-FPM"    "pgrep php-fpm"     "PHP_FPM=\$(ls /usr/sbin/php-fpm* 2>/dev/null | tail -1); [ -n \"$PHP_FPM\" ] && $PHP_FPM 2>/dev/null"
     check_restart "MariaDB"    "pgrep mysqld"      "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
     check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize yes 2>/dev/null"
-    check_restart "PostgreSQL" "pgrep postgres"    "PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"$PG_VER\" ] && su - postgres -c \"pg_ctlcluster $PG_VER main start 2>/dev/null || true\" 2>/dev/null"
+    check_restart "PostgreSQL" "pgrep postgres"    "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"$PG_VER\" ] && su - postgres -c \"pg_ctlcluster $PG_VER main start 2>/dev/null\" 2>/dev/null"
     check_restart "ChromaDB"   "pgrep -f chroma"   "nohup chroma run --host 127.0.0.1 --port 8000 >> ~/logs/chromadb.log 2>&1 &"
     check_restart "Cloudflare" "pgrep cloudflared" "nohup cloudflared tunnel run $TUNNEL_NAME >> ~/logs/cloudflared.log 2>&1 &"
 
@@ -781,7 +786,7 @@ server {
     location = /wp-login.php {
         limit_req zone=wp_login burst=3 nodelay;
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param HTTPS on;
@@ -805,7 +810,7 @@ server {
     # PHP-FPM
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param HTTPS on;
@@ -897,7 +902,7 @@ WPEOF
     create_nginx_wordpress
     ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
     nginx -t && nginx -s reload 2>/dev/null || true
-    php-fpm8.3 2>/dev/null || true
+    PHP_FPM=$(ls /usr/sbin/php-fpm* 2>/dev/null | tail -1); [ -n "$PHP_FPM" ] && $PHP_FPM 2>/dev/null || true
 
     add_to_tunnel "http://localhost:8080"
 
