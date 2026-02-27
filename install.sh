@@ -64,11 +64,26 @@ step1_termux() {
     grep -q 'alias debian=' ~/.bashrc 2>/dev/null || \
         echo 'alias debian="proot-distro login debian --shared-tmp"' >> ~/.bashrc
 
-    if [ ! -f "$PREFIX/etc/ssh/sshd_config" ]; then
+    # Cài openssh nếu chưa có
+    if ! command -v sshd > /dev/null; then
+        log "Cài đặt openssh..."
+        pkg install -y openssh
+    fi
+
+    # Luôn hỏi đặt mật khẩu SSH khi cài mới (chưa có file sshd_config)
+    # hoặc khi người dùng muốn đặt lại
+    if [ ! -f "$PREFIX/etc/ssh/sshd_config" ] || [ ! -f "$HOME/.ssh_password_set" ]; then
         log "Cài đặt SSH server..."
         echo ""
         warn "Đặt password SSH để kết nối từ máy tính (Bitvise):"
         passwd
+        touch "$HOME/.ssh_password_set"
+    else
+        warn "SSH đã cài đặt trước đó, bỏ qua đặt password."
+        read -p "Bạn có muốn đặt lại password SSH? (y/n): " RESET_PW
+        if [[ "$RESET_PW" == "y" ]]; then
+            passwd
+        fi
     fi
 
     # Khởi động SSH
