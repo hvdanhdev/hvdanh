@@ -51,7 +51,7 @@ run_ubuntu() {
 # BƯỚC 1: TERMUX
 # ============================================================
 step1_termux() {
-    section "BƯỚC 1: Cài đặt Termux packages"
+    section "BƯỚC 1: Cài đặt Termux packages + SSH"
     log "Cập nhật package..."
     pkg update -y && pkg upgrade -y 2>/dev/null
     log "Cài tools..."
@@ -59,7 +59,21 @@ step1_termux() {
     termux-setup-storage 2>/dev/null || true
     grep -q 'alias ubuntu=' ~/.bashrc 2>/dev/null || \
         echo 'alias ubuntu="proot-distro login ubuntu --shared-tmp"' >> ~/.bashrc
-    log "Termux xong!"
+
+    # Cài đặt SSH server
+    log "Cài đặt SSH server..."
+    echo ""
+    warn "Đặt password SSH để kết nối từ máy tính (Bitvise):"
+    passwd
+
+    # Khởi động SSH
+    sshd 2>/dev/null || true
+
+    # Tự động khởi động SSH khi Termux mở
+    grep -q 'sshd' ~/.bashrc 2>/dev/null || \
+        echo 'sshd 2>/dev/null || true' >> ~/.bashrc
+
+    log "Termux + SSH xong!"
 }
 
 # ============================================================
@@ -234,14 +248,13 @@ step5_cloudflared() {
     log "Tunnel ID: $TUNNEL_ID"
 
     run_ubuntu "mkdir -p ~/.cloudflared"
-    cat > /tmp/cf_config.yml << EOF
+    run_ubuntu "cat > ~/.cloudflared/config.yml << EOF
 tunnel: $TUNNEL_ID
 credentials-file: /root/.cloudflared/$TUNNEL_ID.json
 
 ingress:
   - service: http_status:404
-EOF
-    cp /tmp/cf_config.yml "$UBUNTU_ROOT/root/.cloudflared/config.yml"
+EOF"
 
     cat > "$UBUNTU_ROOT/root/.vps_config" << EOF
 TUNNEL_NAME=$TUNNEL_NAME
@@ -867,11 +880,16 @@ WPEOF
 
     add_to_tunnel "http://localhost:8080"
 
-    # Cài Redis Object Cache plugin qua WP-CLI
-    log "Cài Redis Object Cache plugin..."
+    # Cài plugins qua WP-CLI
+    log "Cài plugins WordPress..."
     cd /var/www/$SITE_NAME
+
+    # Redis Object Cache
     wp plugin install redis-cache --activate --allow-root 2>/dev/null || true
     wp redis enable --allow-root 2>/dev/null || true
+
+    # Cloudflare Flexible SSL - bắt buộc để tránh redirect loop
+    wp plugin install cloudflare-flexible-ssl --activate --allow-root 2>/dev/null || true
 
     echo ""
     log "WordPress tạo xong!"
@@ -881,7 +899,11 @@ WPEOF
     echo "  Thư mục : /var/www/$SITE_NAME"
     echo "  DB      : $DB_NAME"
     echo ""
-    echo "  WP-CLI  : cd /var/www/$SITE_NAME && wp <command> --allow-root"
+    echo "  Plugins đã cài:"
+    echo "    ✓ Redis Object Cache"
+    echo "    ✓ Cloudflare Flexible SSL"
+    echo ""
+    echo "  WP-CLI  : vps wp $DOMAIN <command>"
     echo ""
 }
 
@@ -1279,6 +1301,26 @@ main() {
 
     echo ""
     log "Done! Dùng 'vps create' để tạo site đầu tiên."
+
+    # Hiển thị thông tin SSH kết nối
+    PHONE_IP=$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || \
+               ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -1)
+    SSH_USER=$(whoami)
+
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  THÔNG TIN KẾT NỐI SSH (Bitvise SSH Client)    ${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  Host     : ${GREEN}${PHONE_IP:-<IP điện thoại>}${NC}"
+    echo -e "  Port     : ${GREEN}8022${NC}"
+    echo -e "  Username : ${GREEN}${SSH_USER}${NC}"
+    echo -e "  Password : ${GREEN}<password bạn vừa đặt lúc cài>}${NC}"
+    echo ""
+    echo -e "  ${YELLOW}Lưu ý: Máy tính và điện thoại phải cùng WiFi${NC}"
+    echo -e "  ${YELLOW}IP điện thoại có thể đổi → kiểm tra trong WiFi settings${NC}"
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 
