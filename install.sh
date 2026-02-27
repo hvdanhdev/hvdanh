@@ -345,7 +345,7 @@ sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-php-fpm8.4 -F > ~/logs/php-fpm.log 2>&1 &
+php-fpm8.4 -F -R > ~/logs/php-fpm.log 2>&1 &
 sleep 1
 
 log "Nginx..."
@@ -623,7 +623,7 @@ while true; do
     fi
 
     check_restart "Nginx"      "pgrep nginx"       "nginx -g 'daemon off;' > ~/logs/nginx.log 2>&1 &"
-    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.4 -F > ~/logs/php-fpm.log 2>&1 &"
+    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.4 -F -R > ~/logs/php-fpm.log 2>&1 &"
     check_restart "MariaDB"    "pgrep mysqld"      "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
     check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize no > ~/logs/redis.log 2>&1 &"
     check_restart "PostgreSQL" "pgrep postgres"    "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start >> ~/logs/startup.log 2>&1 || true\" >> ~/logs/startup.log 2>&1 || true"
@@ -1331,6 +1331,7 @@ main() {
     echo -e "  ${CYAN}vps create${NC}                  Tạo site mới"
     echo -e "  ${CYAN}vps wp thoigianranh.com help${NC} WP-CLI commands"
     echo -e "  ${CYAN}vps db shell${NC}                Vào MariaDB"
+    echo -e "  ${CYAN}vps debug${NC}                   Xem log lỗi chi tiết"
     echo -e "  ${CYAN}vps backup${NC}                  Backup Telegram"
     echo -e "  ${CYAN}vps attach${NC}                  Mở tmux"
     echo ""
