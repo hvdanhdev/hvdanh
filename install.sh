@@ -260,10 +260,14 @@ step5_cloudflared() {
     run_debian "grep -q '/usr/local/bin' ~/.bashrc || \
         echo 'export PATH=\$PATH:/usr/local/bin:/root/.local/bin' >> ~/.bashrc"
 
-    echo ""
-    warn "Sắp đăng nhập Cloudflare - copy link hiện ra và mở trên trình duyệt!"
-    echo ""
-    run_debian "cloudflared tunnel login"
+    if [ ! -f "$DEBIAN_ROOT/root/.cloudflared/cert.pem" ]; then
+        echo ""
+        warn "Sắp đăng nhập Cloudflare - copy link hiện ra và mở trên trình duyệt!"
+        echo ""
+        run_debian "cloudflared tunnel login"
+    else
+        log "Cloudflare certificate đã có sẵn, bỏ qua đăng nhập."
+    fi
 
     echo ""
     read -p "$(echo -e ${CYAN}Nhập tên tunnel [my-server]: ${NC})" TUNNEL_NAME
@@ -640,7 +644,6 @@ while true; do
 
     sleep 45
 done
-SCRIPT
 SCRIPT
 
     # ── backup.sh ─────────────────────────────────────────────
