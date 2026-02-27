@@ -324,65 +324,63 @@ step7_scripts() {
     run_debian "mkdir -p ~/scripts ~/logs ~/backup ~/projects"
 
     # ── start.sh ──────────────────────────────────────────────
+    # ── start.sh ──────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/start.sh" << 'SCRIPT'
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source ~/.vps_config 2>/dev/null || true
 
 GREEN='\033[0;32m'; NC='\033[0m'
-log() { echo -e "${GREEN}[✓]${NC} $1"; }
+log() { echo -e "${GREEN}[✓]${NC} $1" | tee -a /root/logs/startup.log; }
 
-mkdir -p /root/logs
-exec >> /root/logs/startup.log 2>&1
+mkdir -p /root/logs && chmod 777 /root/logs
+echo "--- VPS START UP: $(date) ---" > /root/logs/startup.log
 
 log "MariaDB..."
 pkill -f mysqld 2>/dev/null; sleep 1
 mkdir -p /var/run/mysqld /var/log/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql 2>/dev/null || true
-nohup mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &
-sleep 3
+mysqld --user=mysql > /var/log/mysql/error.log 2>&1 & disown
+sleep 2
 
 log "Redis..."
 mkdir -p /var/log/redis /var/run/redis
 chown -R redis:redis /var/log/redis /var/run/redis 2>/dev/null || true
-nohup redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &
+redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 & disown
 sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-nohup php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &
+php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 & disown
 sleep 1
 
 log "Nginx..."
 mkdir -p /var/log/nginx /run
-nohup nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
+nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 & disown
 sleep 1
 
 log "PostgreSQL..."
 mkdir -p /var/run/postgresql
 chown postgres:postgres /var/run/postgresql 2>/dev/null || true
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
-[ -n "$PG_VER" ] && nohup su - postgres -c "pg_ctlcluster $PG_VER main start" &
-sleep 2
+if [ -n "$PG_VER" ]; then
+    su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 & disown
+fi
+sleep 1
 
 log "ChromaDB..."
-nohup chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &
-sleep 2
+chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 & disown
 
 log "Cloudflare Tunnel..."
-source ~/.vps_config 2>/dev/null || true
 if [ -n "$TUNNEL_NAME" ]; then
-    nohup cloudflared tunnel run "$TUNNEL_NAME" > /root/logs/cloudflared.log 2>&1 &
+    cloudflared tunnel run "$TUNNEL_NAME" > /root/logs/cloudflared.log 2>&1 & disown
 fi
-sleep 2
 
-log "Auto Recovery..."
+log "Auto Scripts..."
 pkill -f auto_recover 2>/dev/null || true
-nohup bash ~/scripts/auto_recover.sh > /root/logs/auto_recover.log 2>&1 &
-
-log "Health Check..."
+bash ~/scripts/auto_recover.sh > /root/logs/auto_recover.log 2>&1 & disown
 pkill -f health_check 2>/dev/null || true
-nohup bash ~/scripts/health_check.sh > /root/logs/health_check.log 2>&1 &
+bash ~/scripts/health_check.sh > /root/logs/health_check.log 2>&1 & disown
 
 echo ""
 bash ~/scripts/status.sh
@@ -631,31 +629,55 @@ while true; do
         redis-cli flushall 2>/dev/null || true
     fi
 
-    check_restart "Nginx"      "pgrep nginx"       "nginx -g 'daemon off;' > ~/logs/nginx.log 2>&1 &"
-    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.4 -F -R > ~/logs/php-fpm.log 2>&1 &"
-    check_restart "MariaDB"    "pgrep mysqld"      "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
-    check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize no > ~/logs/redis.log 2>&1 &"
-    check_restart "PostgreSQL" "pgrep postgres"    "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start >> ~/logs/startup.log 2>&1 || true\" >> ~/logs/startup.log 2>&1 || true"
-    check_restart "ChromaDB"   "pgrep -f chroma"   "nohup chroma run --host 127.0.0.1 --port 8000 >> ~/logs/chromadb.log 2>&1 &"
-    check_restart "Cloudflare" "pgrep cloudflared" "nohup cloudflared tunnel run $TUNNEL_NAME >> ~/logs/cloudflared.log 2>&1 &"
+    check_restart() {
+        if ! eval "$2" > /dev/null 2>&1; then
+            log "Restarting $1..."
+            eval "$3"
+            sleep 2
+        fi
+    }
 
-    # Log rotation > 10MB
-    for F in ~/logs/*.log; do
-        [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
-            mv $F ${F}.old && log "Rotated: $F"
+    while true; do
+        RAM_USED=$(free -m | awk 'NR==2{print $3}')
+        RAM_LIMIT=6500
+        RAM_CRITICAL=7200
+
+        if [ "$RAM_USED" -gt "$RAM_CRITICAL" ]; then
+            log "CRITICAL RAM: ${RAM_USED}MB"
+            tg_send "🚨 RAM CRITICAL: ${RAM_USED}MB - đang dọn!"
+            redis-cli flushall 2>/dev/null || true
+            sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+            sleep 10
+        elif [ "$RAM_USED" -gt "$RAM_LIMIT" ]; then
+            log "HIGH RAM: ${RAM_USED}MB"
+            redis-cli flushall 2>/dev/null || true
+        fi
+
+        check_restart "Nginx"      "pgrep -x nginx"    "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 & disown"
+        check_restart "PHP-FPM"    "pgrep -f php-fpm"  "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 & disown"
+        check_restart "MariaDB"    "pgrep -f mysqld"   "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 & disown"
+        check_restart "Redis"      "pgrep -f redis"    "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 & disown"
+        check_restart "PostgreSQL" "pgrep -f postgres" "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start\" & disown"
+        check_restart "ChromaDB"   "pgrep -f chroma"   "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 & disown"
+        check_restart "Cloudflare" "pgrep -f cloudflared" "cloudflared tunnel run \$TUNNEL_NAME > /root/logs/cloudflared.log 2>&1 & disown"
+
+        # Log rotation > 10MB
+        for F in /root/logs/*.log; do
+            [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
+                mv $F ${F}.old && log "Rotated: $F"
+        done
+
+        sleep 45
     done
-
-    sleep 45
-done
 SCRIPT
 
     # ── backup.sh ─────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/backup.sh" << 'SCRIPT'
 #!/bin/bash
 source ~/.vps_config 2>/dev/null || true
-BACKUP_DIR=~/backup
+BACKUP_DIR=/root/backup
 DATE=$(date +%Y%m%d_%H%M%S)
-LOG=~/logs/backup.log
+LOG=/root/logs/backup.log
 
 mkdir -p $BACKUP_DIR
 log()       { echo "[$(date '+%H:%M:%S')] $1" | tee -a $LOG; }
@@ -1201,8 +1223,9 @@ case "$CMD" in
         ;;
     stop)    run "bash ~/scripts/stop.sh" ;;
     restart)
+        tmux kill-session -t vps 2>/dev/null || true
         run "bash ~/scripts/stop.sh"
-        sleep 3
+        sleep 2
         proot-distro login debian --shared-tmp -- bash -c "
             export PATH=\$PATH:/usr/local/bin:/root/.local/bin
             tmux new-session -d -s vps 2>/dev/null || true
@@ -1229,6 +1252,8 @@ case "$CMD" in
         proot-distro login debian --shared-tmp -- cat /root/logs/nginx.log 2>/dev/null
         echo "==== PHP-FPM LOG ===="
         proot-distro login debian --shared-tmp -- cat /root/logs/php-fpm.log 2>/dev/null
+        echo "==== MARIADB ERROR LOG ===="
+        proot-distro login debian --shared-tmp -- tail -n 20 /var/log/mysql/error.log 2>/dev/null
         echo ""
         echo "==== LOGS DIRECTORY ===="
         proot-distro login debian --shared-tmp -- ls -la /root/logs/
@@ -1258,7 +1283,7 @@ case "$CMD" in
         ;;
     logs)
         SERVICE=${1:-cloudflared}
-        run "tail -f ~/logs/${SERVICE}.log"
+        run "tail -f /root/logs/${SERVICE}.log"
         ;;
     *)
         echo ""
