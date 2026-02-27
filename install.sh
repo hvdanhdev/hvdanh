@@ -97,7 +97,7 @@ step3_nginx_stack() {
     section "BƯỚC 3: Cài Nginx + PHP-FPM + MariaDB + Redis"
 
     log "Cập nhật Ubuntu..."
-    run_ubuntu "apt update && apt upgrade -y 2>/dev/null | tail -3"
+    run_ubuntu "apt update && apt upgrade -y"
 
     log "Tạo thư mục cần thiết..."
     run_ubuntu "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets \
@@ -106,9 +106,8 @@ step3_nginx_stack() {
         /var/www /run/php"
 
     # Chặn invoke-rc.d tự start service khi apt cài (proot không có systemd)
-    log "Cấu hình policy-rc.d (tắt auto-start khi apt install)..."
+    log "Cấu hình policy-rc.d..."
     run_ubuntu "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
-
     log "Cài Nginx + PHP-FPM + extensions..."
     run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y \
         nginx \
@@ -117,7 +116,7 @@ step3_nginx_stack() {
         php8.3-imagick php8.3-pgsql \
         mariadb-server redis-server \
         unzip wget curl git nano tmux python3 python3-pip python3-yaml \
-        2>/dev/null | tail -5"
+       "
 
     log "Cài WP-CLI..."
     run_ubuntu "wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
@@ -211,15 +210,15 @@ step4_extra() {
     section "BƯỚC 4: Cài Node.js + PostgreSQL + ChromaDB"
 
     log "Cài Node.js 20..."
-    run_ubuntu "DEBIAN_FRONTEND=noninteractive curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
-        DEBIAN_FRONTEND=noninteractive apt install -y nodejs 2>/dev/null | tail -3"
+    run_ubuntu "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
+        apt install -y nodejs"
 
     log "Cài PostgreSQL..."
     run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y \
-        postgresql postgresql-contrib 2>/dev/null | tail -3"
+        postgresql postgresql-contrib"
 
     log "Cài ChromaDB..."
-    run_ubuntu "pip3 install chromadb --break-system-packages 2>/dev/null | tail -3"
+    run_ubuntu "pip3 install chromadb --break-system-packages"
 
     log "Node.js + PostgreSQL + ChromaDB xong!"
 }
@@ -313,7 +312,7 @@ log "MariaDB..."
 pkill -f mysqld 2>/dev/null; sleep 1
 mkdir -p /var/run/mysqld /var/log/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql 2>/dev/null || true
-mysqld_safe --user=mysql --skip-grant-tables 2>/dev/null &
+mysqld --user=mysql --skip-networking=0 > /var/log/mysql/error.log 2>&1 &
 sleep 3
 
 log "Redis..."
@@ -325,25 +324,19 @@ sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-php-fpm8.3 --daemonize 2>/dev/null || \
-    php-fpm8.3 -D 2>/dev/null || true
+php-fpm8.3 2>/dev/null || true
 sleep 1
 
 log "Nginx..."
 mkdir -p /var/log/nginx /run
-nginx -t 2>/dev/null && nginx 2>/dev/null || true
+nginx 2>/dev/null || true
 sleep 1
 
 log "PostgreSQL..."
 mkdir -p /var/run/postgresql
 chown postgres:postgres /var/run/postgresql 2>/dev/null || true
-# Khởi tạo cluster nếu chưa có
-if [ ! -d /var/lib/postgresql/*/main/global ] 2>/dev/null; then
-    su - postgres -c "pg_createcluster 14 main 2>/dev/null || pg_createcluster 15 main 2>/dev/null || true" 2>/dev/null || true
-fi
-su - postgres -c "pg_ctlcluster 14 main start 2>/dev/null || \
-    pg_ctlcluster 15 main start 2>/dev/null || \
-    pg_ctlcluster 16 main start 2>/dev/null || true" 2>/dev/null || true
+PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
+[ -n "$PG_VER" ] && su - postgres -c "pg_ctlcluster $PG_VER main start 2>/dev/null || true" 2>/dev/null || true
 sleep 2
 
 log "ChromaDB..."
@@ -372,20 +365,13 @@ SCRIPT
     cat > "$UBUNTU_ROOT/root/scripts/stop.sh" << 'SCRIPT'
 #!/bin/bash
 echo "Dừng tất cả services..."
-# Nginx
 pkill -f nginx 2>/dev/null || true
-# PHP-FPM
 pkill -f php-fpm 2>/dev/null || true
-# MariaDB
 pkill -f mysqld 2>/dev/null || true
-# PostgreSQL
-su - postgres -c "pg_ctlcluster 14 main stop 2>/dev/null || \
-    pg_ctlcluster 15 main stop 2>/dev/null || \
-    pg_ctlcluster 16 main stop 2>/dev/null || true" 2>/dev/null || true
+PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
+[ -n "$PG_VER" ] && su - postgres -c "pg_ctlcluster $PG_VER main stop 2>/dev/null || true" 2>/dev/null || true
 pkill -f postgres 2>/dev/null || true
-# Redis
 pkill -f redis-server 2>/dev/null || true
-# Khác
 pkill -f cloudflared 2>/dev/null || true
 pkill -f chroma 2>/dev/null || true
 pkill -f auto_recover 2>/dev/null || true
@@ -619,10 +605,10 @@ while true; do
     fi
 
     check_restart "Nginx"      "pgrep nginx"       "nginx 2>/dev/null"
-    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.3 --daemonize 2>/dev/null"
-    check_restart "MariaDB"    "pgrep mysqld"      "mysqld_safe --user=mysql 2>/dev/null &"
+    check_restart "PHP-FPM"    "pgrep php-fpm"     "php-fpm8.3 2>/dev/null"
+    check_restart "MariaDB"    "pgrep mysqld"      "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
     check_restart "Redis"      "redis-cli ping"    "redis-server /etc/redis/redis.conf --daemonize yes 2>/dev/null"
-    check_restart "PostgreSQL" "pgrep postgres"    "su - postgres -c 'pg_ctlcluster 14 main start 2>/dev/null || pg_ctlcluster 15 main start 2>/dev/null || true' 2>/dev/null"
+    check_restart "PostgreSQL" "pgrep postgres"    "PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"$PG_VER\" ] && su - postgres -c \"pg_ctlcluster $PG_VER main start 2>/dev/null || true\" 2>/dev/null"
     check_restart "ChromaDB"   "pgrep -f chroma"   "nohup chroma run --host 127.0.0.1 --port 8000 >> ~/logs/chromadb.log 2>&1 &"
     check_restart "Cloudflare" "pgrep cloudflared" "nohup cloudflared tunnel run $TUNNEL_NAME >> ~/logs/cloudflared.log 2>&1 &"
 
@@ -911,7 +897,7 @@ WPEOF
     create_nginx_wordpress
     ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
     nginx -t && nginx -s reload 2>/dev/null || true
-    php-fpm8.3 --daemonize 2>/dev/null || true
+    php-fpm8.3 2>/dev/null || true
 
     add_to_tunnel "http://localhost:8080"
 
