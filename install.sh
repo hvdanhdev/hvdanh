@@ -7,7 +7,8 @@
 #             Auto Recovery, Health Check, Security, Monitor
 # ============================================================
 
-set -e
+# KHÔNG dùng set -e vì Android OOM Killer có thể giết ngang tiến trình apt
+# Nếu dùng set -e, script sẽ dừng hoàn toàn và không chạy đến các bước quan trọng
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
