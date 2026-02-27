@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-UBUNTU_ROOT="/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/ubuntu"
+DEBIAN_ROOT="/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/debian"
 
 log()     { echo -e "${GREEN}[✓]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
@@ -43,8 +43,8 @@ cat << 'EOF'
 EOF
 }
 
-run_ubuntu() {
-    proot-distro login ubuntu --shared-tmp -- bash -c "$1"
+run_debian() {
+    proot-distro login debian --shared-tmp -- bash -c "$1"
 }
 
 # ============================================================
@@ -57,8 +57,8 @@ step1_termux() {
     log "Cài tools..."
     pkg install -y proot-distro wget curl git openssh python tmux 2>/dev/null
     termux-setup-storage 2>/dev/null || true
-    grep -q 'alias ubuntu=' ~/.bashrc 2>/dev/null || \
-        echo 'alias ubuntu="proot-distro login ubuntu --shared-tmp"' >> ~/.bashrc
+    grep -q 'alias debian=' ~/.bashrc 2>/dev/null || \
+        echo 'alias debian="proot-distro login debian --shared-tmp"' >> ~/.bashrc
 
     # Cài đặt SSH server
     log "Cài đặt SSH server..."
@@ -79,15 +79,15 @@ step1_termux() {
 # ============================================================
 # BƯỚC 2: UBUNTU
 # ============================================================
-step2_ubuntu() {
-    section "BƯỚC 2: Cài Ubuntu proot"
-    if proot-distro list 2>/dev/null | grep -q "ubuntu.*installed"; then
-        warn "Ubuntu đã cài, bỏ qua..."
+step2_debian() {
+    section "BƯỚC 2: Cài Debian proot"
+    if proot-distro list 2>/dev/null | grep -q "debian.*installed"; then
+        warn "Debian đã cài, bỏ qua..."
     else
-        log "Cài Ubuntu 22.04..."
-        proot-distro install ubuntu
+        log "Cài Debian 22.04..."
+        proot-distro install debian
     fi
-    log "Ubuntu xong!"
+    log "Debian xong!"
 }
 
 # ============================================================
@@ -96,27 +96,28 @@ step2_ubuntu() {
 step3_nginx_stack() {
     section "BƯỚC 3: Cài Nginx + PHP-FPM + MariaDB + Redis"
 
-    log "Cập nhật Ubuntu..."
-    run_ubuntu "apt update && apt upgrade -y"
+    log "Cập nhật Debian..."
+    run_debian "apt update && apt upgrade -y"
 
     log "Tạo thư mục cần thiết..."
-    run_ubuntu "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets \
+    run_debian "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets \
         /etc/redis /etc/php \
         /var/log/nginx /var/log/redis /var/log/php \
         /var/www /run/php"
 
     # Chặn invoke-rc.d tự start service khi apt cài (proot không có systemd)
     log "Cấu hình policy-rc.d..."
-    run_ubuntu "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
+    run_debian "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
 
-    # Thêm PPA ondrej/php để có đầy đủ PHP extensions trên Ubuntu mới
-    log "Thêm PPA ondrej/php..."
-    run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common && \
-        add-apt-repository -y ppa:ondrej/php && \
+    # Thêm repo packages.sury.org/php cho Debian
+    log "Thêm Repo sury/php..."
+    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y lsb-release ca-certificates apt-transport-https software-properties-common curl && \
+        curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg && \
+        sh -c 'echo \"deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ \$(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list' && \
         apt update"
 
     log "Cài Nginx + PHP-FPM + extensions..."
-    run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y \
+    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
         nginx \
         php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
         php8.4-xml php8.4-zip php8.4-redis php8.4-intl php8.4-bcmath \
@@ -126,12 +127,12 @@ step3_nginx_stack() {
        "
 
     log "Cài WP-CLI..."
-    run_ubuntu "wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+    run_debian "wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
         -O /usr/local/bin/wp && chmod +x /usr/local/bin/wp"
 
     log "Cấu hình Nginx chính..."
-    run_ubuntu "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets"
-    run_ubuntu "cat > /etc/nginx/nginx.conf << 'NGINX'
+    run_debian "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets"
+    run_debian "cat > /etc/nginx/nginx.conf << 'NGINX'
 user www-data;
 worker_processes 1;
 pid /run/nginx.pid;
@@ -174,18 +175,18 @@ http {
 NGINX"
 
     log "Cấu hình PHP-FPM..."
-    run_ubuntu "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
+    run_debian "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
-    run_ubuntu "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
+    run_debian "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
-    run_ubuntu "sed -i 's/^pm.start_servers = .*/pm.start_servers = 2/' \
+    run_debian "sed -i 's/^pm.start_servers = .*/pm.start_servers = 2/' \
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
-    run_ubuntu "sed -i 's/^;pm.max_requests = .*/pm.max_requests = 500/' \
+    run_debian "sed -i 's/^;pm.max_requests = .*/pm.max_requests = 500/' \
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
 
     log "Cấu hình Redis..."
-    run_ubuntu "mkdir -p /etc/redis"
-    run_ubuntu "cat > /etc/redis/redis.conf << 'REDIS'
+    run_debian "mkdir -p /etc/redis"
+    run_debian "cat > /etc/redis/redis.conf << 'REDIS'
 bind 127.0.0.1
 port 6379
 maxmemory 64mb
@@ -195,10 +196,10 @@ tcp-keepalive 60
 loglevel warning
 logfile /var/log/redis/redis-server.log
 REDIS"
-    run_ubuntu "mkdir -p /var/log/redis && chown redis:redis /var/log/redis 2>/dev/null || true"
-    run_ubuntu "rm -f /etc/nginx/sites-enabled/default"
+    run_debian "mkdir -p /var/log/redis && chown redis:redis /var/log/redis 2>/dev/null || true"
+    run_debian "rm -f /etc/nginx/sites-enabled/default"
     # Tạo snippets fastcgi-php nếu chưa có
-    run_ubuntu "[ -f /etc/nginx/snippets/fastcgi-php.conf ] || cat > /etc/nginx/snippets/fastcgi-php.conf << 'SNIP'
+    run_debian "[ -f /etc/nginx/snippets/fastcgi-php.conf ] || cat > /etc/nginx/snippets/fastcgi-php.conf << 'SNIP'
 fastcgi_split_path_info ^(.+\\.php)(/.+)\$;
 try_files \$fastcgi_script_name =404;
 set \$path_info \$fastcgi_path_info;
@@ -217,15 +218,15 @@ step4_extra() {
     section "BƯỚC 4: Cài Node.js + PostgreSQL + ChromaDB"
 
     log "Cài Node.js 20..."
-    run_ubuntu "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
+    run_debian "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
         apt install -y nodejs"
 
     log "Cài PostgreSQL..."
-    run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y \
+    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
         postgresql postgresql-contrib"
 
     log "Cài ChromaDB..."
-    run_ubuntu "pip3 install chromadb --break-system-packages"
+    run_debian "pip3 install chromadb --break-system-packages"
 
     log "Node.js + PostgreSQL + ChromaDB xong!"
 }
@@ -237,28 +238,28 @@ step5_cloudflared() {
     section "BƯỚC 5: Cài và cấu hình Cloudflare Tunnel"
 
     log "Tải cloudflared ARM64..."
-    run_ubuntu "wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 \
+    run_debian "wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 \
         -O /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared"
-    run_ubuntu "grep -q '/usr/local/bin' ~/.bashrc || \
+    run_debian "grep -q '/usr/local/bin' ~/.bashrc || \
         echo 'export PATH=\$PATH:/usr/local/bin:/root/.local/bin' >> ~/.bashrc"
 
     echo ""
     warn "Sắp đăng nhập Cloudflare - copy link hiện ra và mở trên trình duyệt!"
     echo ""
-    run_ubuntu "cloudflared tunnel login"
+    run_debian "cloudflared tunnel login"
 
     echo ""
     read -p "$(echo -e ${CYAN}Nhập tên tunnel [my-server]: ${NC})" TUNNEL_NAME
     TUNNEL_NAME=${TUNNEL_NAME:-my-server}
 
     log "Tạo tunnel: $TUNNEL_NAME"
-    run_ubuntu "cloudflared tunnel create $TUNNEL_NAME 2>/dev/null || true"
+    run_debian "cloudflared tunnel create $TUNNEL_NAME 2>/dev/null || true"
 
-    TUNNEL_ID=$(run_ubuntu "cloudflared tunnel list 2>/dev/null | grep '$TUNNEL_NAME' | awk '{print \$1}'")
+    TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null | grep '$TUNNEL_NAME' | awk '{print \$1}'")
     log "Tunnel ID: $TUNNEL_ID"
 
-    run_ubuntu "mkdir -p ~/.cloudflared"
-    run_ubuntu "cat > ~/.cloudflared/config.yml << EOF
+    run_debian "mkdir -p ~/.cloudflared"
+    run_debian "cat > ~/.cloudflared/config.yml << EOF
 tunnel: $TUNNEL_ID
 credentials-file: /root/.cloudflared/$TUNNEL_ID.json
 
@@ -266,7 +267,7 @@ ingress:
   - service: http_status:404
 EOF"
 
-    cat > "$UBUNTU_ROOT/root/.vps_config" << EOF
+    cat > "$DEBIAN_ROOT/root/.vps_config" << EOF
 TUNNEL_NAME=$TUNNEL_NAME
 TUNNEL_ID=$TUNNEL_ID
 TG_ENABLED=false
@@ -289,12 +290,12 @@ step6_telegram() {
     read -p "$(echo -e ${CYAN}Telegram Chat ID [Enter để bỏ qua]: ${NC})" TG_CHAT_ID
 
     if [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
-        sed -i "s/TG_ENABLED=false/TG_ENABLED=true/" "$UBUNTU_ROOT/root/.vps_config"
-        echo "TG_TOKEN=$TG_TOKEN" >> "$UBUNTU_ROOT/root/.vps_config"
-        echo "TG_CHAT_ID=$TG_CHAT_ID" >> "$UBUNTU_ROOT/root/.vps_config"
+        sed -i "s/TG_ENABLED=false/TG_ENABLED=true/" "$DEBIAN_ROOT/root/.vps_config"
+        echo "TG_TOKEN=$TG_TOKEN" >> "$DEBIAN_ROOT/root/.vps_config"
+        echo "TG_CHAT_ID=$TG_CHAT_ID" >> "$DEBIAN_ROOT/root/.vps_config"
         log "Telegram đã cấu hình!"
     else
-        warn "Bỏ qua. Sửa ~/.vps_config trong Ubuntu để thêm sau."
+        warn "Bỏ qua. Sửa ~/.vps_config trong Debian để thêm sau."
     fi
 }
 
@@ -303,10 +304,10 @@ step6_telegram() {
 # ============================================================
 step7_scripts() {
     section "BƯỚC 7: Tạo scripts quản lý"
-    run_ubuntu "mkdir -p ~/scripts ~/logs ~/backup ~/projects"
+    run_debian "mkdir -p ~/scripts ~/logs ~/backup ~/projects"
 
     # ── start.sh ──────────────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/start.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/start.sh" << 'SCRIPT'
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source ~/.vps_config 2>/dev/null || true
@@ -367,7 +368,7 @@ bash ~/scripts/status.sh
 SCRIPT
 
     # ── stop.sh ───────────────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/stop.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/stop.sh" << 'SCRIPT'
 #!/bin/bash
 echo "Dừng tất cả services..."
 pkill -f nginx 2>/dev/null || true
@@ -385,7 +386,7 @@ echo "Đã dừng tất cả!"
 SCRIPT
 
     # ── status.sh ─────────────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/status.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/status.sh" << 'SCRIPT'
 #!/bin/bash
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 
@@ -426,7 +427,7 @@ echo ""
 SCRIPT
 
     # ── monitor.sh ────────────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/monitor.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/monitor.sh" << 'SCRIPT'
 #!/bin/bash
 # Real-time monitor: RAM, CPU, Nginx requests, top processes
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -498,7 +499,7 @@ done
 SCRIPT
 
     # ── health_check.sh ───────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/health_check.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/health_check.sh" << 'SCRIPT'
 #!/bin/bash
 # Gửi heartbeat Telegram mỗi 5 phút
 # Nếu không nhận được tin nhắn > 10 phút = server có vấn đề
@@ -562,7 +563,7 @@ done
 SCRIPT
 
     # ── auto_recover.sh ───────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/auto_recover.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/auto_recover.sh" << 'SCRIPT'
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source ~/.vps_config 2>/dev/null || true
@@ -628,7 +629,7 @@ done
 SCRIPT
 
     # ── backup.sh ─────────────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/backup.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/backup.sh" << 'SCRIPT'
 #!/bin/bash
 source ~/.vps_config 2>/dev/null || true
 BACKUP_DIR=~/backup
@@ -692,7 +693,7 @@ tg_send "✅ Backup xong! $COUNT sites. $(date '+%H:%M %d/%m/%Y')"
 SCRIPT
 
     # ── create-site.sh ────────────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/create-site.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/create-site.sh" << 'SCRIPT'
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source ~/.vps_config 2>/dev/null || true
@@ -1019,7 +1020,7 @@ esac
 SCRIPT
 
     # ── wp.sh - WP-CLI helper ─────────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/wp.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/wp.sh" << 'SCRIPT'
 #!/bin/bash
 # WP-CLI helper - chạy lệnh WP-CLI trên site chỉ định
 # Dùng: wp.sh <domain> <wp-cli command>
@@ -1058,7 +1059,7 @@ wp $CMD --allow-root --path=$SITE_DIR
 SCRIPT
 
     # ── db.sh - Database helper ───────────────────────────────
-    cat > "$UBUNTU_ROOT/root/scripts/db.sh" << 'SCRIPT'
+    cat > "$DEBIAN_ROOT/root/scripts/db.sh" << 'SCRIPT'
 #!/bin/bash
 # Database helper
 CMD=$1
@@ -1127,7 +1128,7 @@ SQL
 esac
 SCRIPT
 
-    run_ubuntu "chmod +x ~/scripts/*.sh"
+    run_debian "chmod +x ~/scripts/*.sh"
     log "Tất cả scripts tạo xong!"
 }
 
@@ -1142,7 +1143,7 @@ step8_boot() {
 #!/data/data/com.termux/files/usr/bin/bash
 termux-wake-lock
 sleep 15
-proot-distro login ubuntu --shared-tmp -- bash -c '
+proot-distro login debian --shared-tmp -- bash -c '
     export PATH=$PATH:/usr/local/bin:/root/.local/bin
     tmux new-session -d -s vps 2>/dev/null || true
     tmux send-keys -t vps "bash ~/scripts/start.sh" Enter
@@ -1165,11 +1166,11 @@ step9_vps_command() {
 #!/data/data/com.termux/files/usr/bin/bash
 CMD=$1; shift
 
-run() { proot-distro login ubuntu --shared-tmp -- bash -c "$1"; }
+run() { proot-distro login debian --shared-tmp -- bash -c "$1"; }
 
 case "$CMD" in
     start)
-        proot-distro login ubuntu --shared-tmp -- bash -c "
+        proot-distro login debian --shared-tmp -- bash -c "
             export PATH=\$PATH:/usr/local/bin:/root/.local/bin
             tmux new-session -d -s vps 2>/dev/null || true
             tmux send-keys -t vps 'bash ~/scripts/start.sh' Enter
@@ -1181,18 +1182,18 @@ case "$CMD" in
     restart)
         run "bash ~/scripts/stop.sh"
         sleep 3
-        proot-distro login ubuntu --shared-tmp -- bash -c "
+        proot-distro login debian --shared-tmp -- bash -c "
             export PATH=\$PATH:/usr/local/bin:/root/.local/bin
             tmux new-session -d -s vps 2>/dev/null || true
             tmux send-keys -t vps 'bash ~/scripts/start.sh' Enter
         "
         ;;
     status)   run "bash ~/scripts/status.sh" ;;
-    monitor)  proot-distro login ubuntu --shared-tmp -- bash ~/scripts/monitor.sh ;;
+    monitor)  proot-distro login debian --shared-tmp -- bash ~/scripts/monitor.sh ;;
     create)   run "bash ~/scripts/create-site.sh" ;;
     backup)   run "bash ~/scripts/backup.sh" ;;
-    attach)   proot-distro login ubuntu --shared-tmp -- tmux attach -t vps ;;
-    ubuntu)   proot-distro login ubuntu --shared-tmp ;;
+    attach)   proot-distro login debian --shared-tmp -- tmux attach -t vps ;;
+    debian)   proot-distro login debian --shared-tmp ;;
     wp)
         DOMAIN=$1; shift
         run "bash ~/scripts/wp.sh $DOMAIN $*"
@@ -1258,7 +1259,7 @@ case "$CMD" in
         echo "║  vps backup             Backup lên Telegram   ║"
         echo "║  vps attach             Mở tmux               ║"
         echo "║  vps logs [service]     Xem log               ║"
-        echo "║  vps ubuntu             Vào Ubuntu shell      ║"
+        echo "║  vps debian             Vào Debian shell      ║"
         echo "╚═══════════════════════════════════════════════╝"
         echo ""
         ;;
@@ -1291,7 +1292,7 @@ main() {
     [[ "$CONFIRM" != "y" ]] && echo "Hủy." && exit 0
 
     step1_termux
-    step2_ubuntu
+    step2_debian
     step3_nginx_stack
     step4_extra
     step5_cloudflared
@@ -1316,7 +1317,7 @@ main() {
 
     read -p "Khởi động server ngay? (y/n): " START_NOW
     if [[ "$START_NOW" == "y" ]]; then
-        proot-distro login ubuntu --shared-tmp -- bash -c "
+        proot-distro login debian --shared-tmp -- bash -c "
             export PATH=\$PATH:/usr/local/bin:/root/.local/bin
             tmux new-session -d -s vps 2>/dev/null || true
             tmux send-keys -t vps 'bash ~/scripts/start.sh' Enter
