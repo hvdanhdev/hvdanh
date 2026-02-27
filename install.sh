@@ -1368,7 +1368,7 @@ main() {
         tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
         echo "Đang khởi động..."
         sleep 5
-        run "bash ~/scripts/status.sh"
+        run_debian "bash ~/scripts/status.sh"
     fi
 
     echo ""
