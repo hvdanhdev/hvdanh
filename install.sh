@@ -176,13 +176,13 @@ NGINX"
 
     log "Cấu hình PHP-FPM..."
     run_debian "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
-        /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
+        /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
-        /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
+        /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^pm.start_servers = .*/pm.start_servers = 2/' \
-        /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
+        /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^;pm.max_requests = .*/pm.max_requests = 500/' \
-        /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
+        /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
 
     log "Cấu hình Redis..."
     run_debian "mkdir -p /etc/redis"
