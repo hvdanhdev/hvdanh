@@ -81,11 +81,11 @@ step1_termux() {
 # ============================================================
 step2_debian() {
     section "BƯỚC 2: Cài Debian proot"
-    if proot-distro list 2>/dev/null | grep -q "debian.*installed"; then
-        warn "Debian đã cài, bỏ qua..."
+    if [ -d "$DEBIAN_ROOT" ] && [ -f "$DEBIAN_ROOT/etc/debian_version" ]; then
+        warn "Debian đã cài, bỏ qua tải xuống..."
     else
-        log "Cài Debian 22.04..."
-        proot-distro install debian
+        log "Cài Debian Trixie (testing)..."
+        proot-distro install debian || true
     fi
     log "Debian xong!"
 }
