@@ -53,10 +53,10 @@ run_debian() {
 step1_termux() {
     section "BƯỚC 1: Cài đặt Termux packages + SSH"
     log "Cập nhật package..."
-    pkg update -y && pkg upgrade -y 2>/dev/null
+    pkg update -y && pkg upgrade -y
     log "Cài tools..."
-    pkg install -y proot-distro wget curl git openssh python tmux 2>/dev/null
-    termux-setup-storage 2>/dev/null || true
+    pkg install -y proot-distro wget curl git openssh python tmux
+    termux-setup-storage || true
     grep -q 'alias debian=' ~/.bashrc 2>/dev/null || \
         echo 'alias debian="proot-distro login debian --shared-tmp"' >> ~/.bashrc
 
