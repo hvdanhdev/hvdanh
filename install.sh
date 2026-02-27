@@ -100,6 +100,7 @@ step3_nginx_stack() {
         -O /usr/local/bin/wp && chmod +x /usr/local/bin/wp"
 
     log "Cấu hình Nginx chính..."
+    run_ubuntu "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets"
     run_ubuntu "cat > /etc/nginx/nginx.conf << 'NGINX'
 user www-data;
 worker_processes 1;
@@ -164,8 +165,16 @@ loglevel warning
 logfile /var/log/redis/redis-server.log
 REDIS"
     run_ubuntu "mkdir -p /var/log/redis && chown redis:redis /var/log/redis 2>/dev/null || true"
-    run_ubuntu "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
     run_ubuntu "rm -f /etc/nginx/sites-enabled/default"
+    # Tạo snippets fastcgi-php nếu chưa có
+    run_ubuntu "[ -f /etc/nginx/snippets/fastcgi-php.conf ] || cat > /etc/nginx/snippets/fastcgi-php.conf << 'SNIP'
+fastcgi_split_path_info ^(.+\\.php)(/.+)\$;
+try_files \$fastcgi_script_name =404;
+set \$path_info \$fastcgi_path_info;
+fastcgi_param PATH_INFO \$path_info;
+fastcgi_index index.php;
+include fastcgi.conf;
+SNIP"
 
     log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
 }
