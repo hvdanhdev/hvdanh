@@ -192,7 +192,7 @@ http {
 NGINX"
 
     log "Cấu hình PHP-FPM..."
-    run_debian "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
+    run_debian "sed -i 's/^listen = .*/listen = 127.0.0.1:9000/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
@@ -223,6 +223,7 @@ set \$path_info \$fastcgi_path_info;
 fastcgi_param PATH_INFO \$path_info;
 fastcgi_index index.php;
 include fastcgi.conf;
+fastcgi_pass 127.0.0.1:9000;
 SNIP"
 
     log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
@@ -363,13 +364,14 @@ nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
 log "PostgreSQL..."
-mkdir -p /var/run/postgresql
-chown postgres:postgres /var/run/postgresql 2>/dev/null || true
+mkdir -p /var/run/postgresql /var/log/postgresql
+chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null || true
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 if [ -n "$PG_VER" ]; then
+    # Khởi động PostgreSQL và đảm bảo log được ghi nhận
     su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 &
 fi
-sleep 1
+sleep 2
 
 log "ChromaDB..."
 chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &
@@ -409,10 +411,20 @@ SCRIPT
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 check() {
-    if eval "$2" > /dev/null 2>&1; then
-        echo -e "  ${GREEN}● RUNNING${NC}  $1"
+    local NAME=$1 PORT=$2
+    if timeout 0.1 bash -c "cat < /dev/tcp/127.0.0.1/$PORT" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}● RUNNING${NC}  $1 (Port $PORT)"
     else
-        echo -e "  ${RED}○ STOPPED${NC}  $1"
+        # Một số dịch vụ không check bằng port được (như AutoRecover) thì dùng pgrep
+        if [[ "$PORT" == "pgrep" ]]; then
+            if pgrep -f "$1" > /dev/null 2>&1; then
+                echo -e "  ${GREEN}● RUNNING${NC}  $1"
+            else
+                echo -e "  ${RED}○ STOPPED${NC}  $1"
+            fi
+        else
+            echo -e "  ${RED}○ STOPPED${NC}  $1"
+        fi
     fi
 }
 
@@ -420,15 +432,15 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${CYAN}            SERVER STATUS                  ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
-check "Nginx"         "pgrep -x nginx"
-check "PHP-FPM"       "pgrep -f php-fpm"
-check "MariaDB"       "pgrep -f mysqld"
-check "Redis"         "pgrep -f redis-server"
-check "PostgreSQL"    "pgrep -f postgres"
-check "ChromaDB"      "pgrep -f chroma"
-check "Cloudflare"    "pgrep -f cloudflared"
-check "AutoRecover"   "pgrep -f auto_recover"
-check "HealthCheck"   "pgrep -f health_check"
+check "Nginx"         "80"
+check "PHP-FPM"       "9000"
+check "MariaDB"       "3306"
+check "Redis"         "6379"
+check "PostgreSQL"    "5432"
+check "ChromaDB"      "8000"
+check "Cloudflare"    "pgrep"
+check "AutoRecover"   "pgrep"
+check "HealthCheck"   "pgrep"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "  RAM  : $(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')"
@@ -614,36 +626,46 @@ log "=== Auto Recovery started ==="
 RAM_LIMIT=6500
 RAM_CRITICAL=7200
 
-while true; do
-    RAM_USED=$(free -m | awk 'NR==2{print $3}')
+    check_restart() {
+        local NAME=$1 PORT=$2 START=$3
+        if ! timeout 0.1 bash -c "cat < /dev/tcp/127.0.0.1/$PORT" >/dev/null 2>&1; then
+            # Nếu là pgrep (Cloudflare) thì dùng pgrep
+            if [[ "$PORT" == "pgrep" ]]; then
+                if pgrep -f "cloudflared" > /dev/null 2>&1; then return 0; fi
+            fi
+            log "WARN: $NAME stopped (Port $PORT), restarting..."
+            eval "$START" 2>/dev/null; sleep 3
+        fi
+    }
 
-    if [ "$RAM_USED" -gt "$RAM_CRITICAL" ]; then
-        log "CRITICAL RAM: ${RAM_USED}MB"
-        tg_send "🚨 RAM CRITICAL: ${RAM_USED}MB - đang dọn!"
-        redis-cli flushall 2>/dev/null || true
-        sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-        sleep 10
-    elif [ "$RAM_USED" -gt "$RAM_LIMIT" ]; then
-        log "HIGH RAM: ${RAM_USED}MB"
-        redis-cli flushall 2>/dev/null || true
-    fi
+    while true; do
+        RAM_USED=$(free -m | awk 'NR==2{print $3}')
+        if [ "$RAM_USED" -gt "$RAM_CRITICAL" ]; then
+            log "CRITICAL RAM: ${RAM_USED}MB"
+            tg_send "🚨 RAM CRITICAL: ${RAM_USED}MB - đang dọn!"
+            redis-cli flushall 2>/dev/null || true
+            sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+            sleep 10
+        elif [ "$RAM_USED" -gt "$RAM_LIMIT" ]; then
+            log "HIGH RAM: ${RAM_USED}MB"
+            redis-cli flushall 2>/dev/null || true
+        fi
 
-    check_restart "Nginx"      "pgrep -x nginx"    "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
-    check_restart "PHP-FPM"    "pgrep -f php-fpm"  "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
-    check_restart "MariaDB"    "pgrep -f mysqld"   "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
-    check_restart "Redis"      "pgrep -f redis"    "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
-    check_restart "PostgreSQL" "pgrep -f postgres" "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start\" &"
-    check_restart "ChromaDB"   "pgrep -f chroma"   "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
-    check_restart "Cloudflare" "pgrep -f cloudflared" "cloudflared tunnel run \$TUNNEL_NAME > /root/logs/cloudflared.log 2>&1 &"
+        check_restart "Nginx"      "80"   "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
+        check_restart "PHP-FPM"    "9000" "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
+        check_restart "MariaDB"    "3306" "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
+        check_restart "Redis"      "6379" "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
+        check_restart "PostgreSQL" "5432" "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start\" &"
+        check_restart "ChromaDB"   "8000" "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
+        check_restart "Cloudflare" "pgrep" "cloudflared tunnel run \$TUNNEL_NAME > /root/logs/cloudflared.log 2>&1 &"
 
-    # Log rotation > 10MB
-    for F in /root/logs/*.log; do
-        [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
-            mv $F ${F}.old && log "Rotated: $F"
+        # Log rotation > 10MB
+        for F in /root/logs/*.log; do
+            [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
+                mv $F ${F}.old && log "Rotated: $F"
+        done
+        sleep 45
     done
-
-    sleep 45
-done
 SCRIPT
 
     # ── backup.sh ─────────────────────────────────────────────
@@ -1214,12 +1236,16 @@ case "$CMD" in
         proot-distro login debian --shared-tmp -- cat /root/logs/startup.log 2>/dev/null || echo 'Không có log.'
         echo "==== PROCESS LIST (ps aux) ===="
         proot-distro login debian --shared-tmp -- ps aux
-        echo "==== NGINX LOG ===="
-        proot-distro login debian --shared-tmp -- cat /root/logs/nginx.log 2>/dev/null
+        echo "==== NGINX ERROR LOG ===="
+        proot-distro login debian --shared-tmp -- tail -n 20 /var/log/nginx/error.log 2>/dev/null
         echo "==== PHP-FPM LOG ===="
-        proot-distro login debian --shared-tmp -- cat /root/logs/php-fpm.log 2>/dev/null
+        proot-distro login debian --shared-tmp -- tail -n 20 /root/logs/php-fpm.log 2>/dev/null
         echo "==== MARIADB ERROR LOG ===="
         proot-distro login debian --shared-tmp -- tail -n 20 /var/log/mysql/error.log 2>/dev/null
+        echo "==== CHROMADB LOG ===="
+        proot-distro login debian --shared-tmp -- tail -n 20 /root/logs/chromadb.log 2>/dev/null
+        echo "==== CLOUDFLARE LOG ===="
+        proot-distro login debian --shared-tmp -- tail -n 20 /root/logs/cloudflared.log 2>/dev/null
         echo ""
         echo "==== LOGS DIRECTORY ===="
         proot-distro login debian --shared-tmp -- ls -la /root/logs/
@@ -1252,39 +1278,36 @@ case "$CMD" in
         run "tail -f /root/logs/${SERVICE}.log"
         ;;
     *)
-        echo ""
-        echo "╔═══════════════════════════════════════════════╗"
-        echo "║           VPS COMMAND v3.0                    ║"
-        echo "╠═══════════════════════════════════════════════╣"
-        echo "║  SERVER                                       ║"
-        echo "║  vps start              Khởi động server      ║"
-        echo "║  vps stop               Dừng server           ║"
-        echo "║  vps restart            Restart               ║"
-        echo "║  vps status             Trạng thái            ║"
-        echo "║  vps monitor            Real-time monitor     ║"
-        echo "╠═══════════════════════════════════════════════╣"
-        echo "║  WEBSITES                                     ║"
-        echo "║  vps create             Tạo site mới          ║"
-        echo "║  vps list               Danh sách sites       ║"
-        echo "║  vps delete <domain>    Xóa site              ║"
-        echo "╠═══════════════════════════════════════════════╣"
-        echo "║  DATABASE                                     ║"
-        echo "║  vps db shell           Vào MariaDB           ║"
-        echo "║  vps db list            Danh sách databases   ║"
-        echo "║  vps db create          Tạo database          ║"
-        echo "║  vps db export <db>     Export database       ║"
-        echo "║  vps db import <db> <f> Import database       ║"
-        echo "╠═══════════════════════════════════════════════╣"
-        echo "║  WORDPRESS                                    ║"
-        echo "║  vps wp <domain> <cmd>  Chạy WP-CLI           ║"
-        echo "╠═══════════════════════════════════════════════╣"
-        echo "║  KHÁC                                         ║"
-        echo "║  vps backup             Backup lên Telegram   ║"
-        echo "║  vps attach             Mở tmux               ║"
-        echo "║  vps logs [service]     Xem log               ║"
-        echo "║  vps debian             Vào Debian shell      ║"
-        echo "╚═══════════════════════════════════════════════╝"
-        echo ""
+        if [ -z "$CMD" ]; then
+            while true; do
+                clear
+                banner
+                echo -e "${CYAN}════════════════ CONTROL PANEL v4.2 ════════════════${NC}"
+                echo -e "  1.  Khởi động Server       5. Tạo Website mới"
+                echo -e "  2.  Dừng Server            6. Danh sách Websites"
+                echo -e "  3.  Xem Trạng thái         7. Backup Telegram"
+                echo -e "  4.  Monitor Real-time      8. Xem Log (Debug)"
+                echo -e "  9.  Mở Tmux (Attach)       0. Thoát"
+                echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
+                echo ""
+                read -p "Chọn chức năng (0-9): " OPT
+                case $OPT in
+                    1) vps start; sleep 2 ;;
+                    2) vps stop; sleep 2 ;;
+                    3) vps status; read -p "Bấm phím bất kỳ để về Menu..." ;;
+                    4) vps monitor ;;
+                    5) vps create ;;
+                    6) vps list; read -p "Bấm phím bất kỳ để về Menu..." ;;
+                    7) vps backup; sleep 2 ;;
+                    8) vps debug; read -p "Báo cáo log xong. Bấm phím bất kỳ để về Menu..." ;;
+                    9) vps attach ;;
+                    0) exit 0 ;;
+                    *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
+                esac
+            done
+        else
+            echo "Lệnh không hợp lệ. Gõ 'vps' để mở Menu hoặc xem trợ giúp."
+        fi
         ;;
 esac
 VPS
@@ -1341,13 +1364,11 @@ main() {
 
     read -p "Khởi động server ngay? (y/n): " START_NOW
     if [[ "$START_NOW" == "y" ]]; then
-        proot-distro login debian --shared-tmp -- bash -c "
-            export PATH=\$PATH:/usr/local/bin:/root/.local/bin
-            tmux new-session -d -s vps 2>/dev/null || true
-            tmux send-keys -t vps 'bash ~/scripts/start.sh' Enter
-            sleep 3
-            bash ~/scripts/status.sh
-        "
+        tmux new-session -d -s vps 2>/dev/null || true
+        tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
+        echo "Đang khởi động..."
+        sleep 5
+        run "bash ~/scripts/status.sh"
     fi
 
     echo ""
