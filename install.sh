@@ -1387,13 +1387,16 @@ main() {
     echo -e "  Host     : ${GREEN}${PHONE_IP:-<IP điện thoại>}${NC}"
     echo -e "  Port     : ${GREEN}8022${NC}"
     echo -e "  Username : ${GREEN}${SSH_USER}${NC}"
-    echo -e "  Password : ${GREEN}<password bạn vừa đặt lúc cài>}${NC}"
+    echo -e "  Password : ${GREEN}<password bạn vừa đặt lúc cài>${NC}"
     echo ""
     echo -e "  ${YELLOW}Lưu ý: Máy tính và điện thoại phải cùng WiFi${NC}"
     echo -e "  ${YELLOW}IP điện thoại có thể đổi → kiểm tra trong WiFi settings${NC}"
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
+    read -n 1 -s -r -p "Bấm phím bất kỳ để vào Menu điều khiển VPS..."
+    echo ""
+    vps
 }
 
 main
