@@ -85,6 +85,12 @@ step3_nginx_stack() {
     log "Cập nhật Ubuntu..."
     run_ubuntu "apt update && apt upgrade -y 2>/dev/null | tail -3"
 
+    log "Tạo thư mục cần thiết..."
+    run_ubuntu "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets \
+        /etc/redis /etc/php \
+        /var/log/nginx /var/log/redis /var/log/php \
+        /var/www /run/php"
+
     log "Cài Nginx + PHP-FPM + extensions..."
     run_ubuntu "DEBIAN_FRONTEND=noninteractive apt install -y \
         nginx \
@@ -154,6 +160,7 @@ NGINX"
         /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true"
 
     log "Cấu hình Redis..."
+    run_ubuntu "mkdir -p /etc/redis"
     run_ubuntu "cat > /etc/redis/redis.conf << 'REDIS'
 bind 127.0.0.1
 port 6379
