@@ -209,7 +209,7 @@ http {
 NGINX"
 
     log "Cấu hình PHP-FPM..."
-    run_debian "sed -i 's/^listen = .*/listen = 127.0.0.1:9000/' \
+    run_debian "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
@@ -233,14 +233,14 @@ REDIS"
     run_debian "mkdir -p /var/log/redis && chown redis:redis /var/log/redis 2>/dev/null || true"
     run_debian "rm -f /etc/nginx/sites-enabled/default"
     # Tạo snippets fastcgi-php nếu chưa có
-    run_debian "[ -f /etc/nginx/snippets/fastcgi-php.conf ] || cat > /etc/nginx/snippets/fastcgi-php.conf << 'SNIP'
+    run_debian "cat > /etc/nginx/snippets/fastcgi-php.conf << 'SNIP'
 fastcgi_split_path_info ^(.+\\.php)(/.+)\$;
 try_files \$fastcgi_script_name =404;
 set \$path_info \$fastcgi_path_info;
 fastcgi_param PATH_INFO \$path_info;
 fastcgi_index index.php;
 include fastcgi.conf;
-fastcgi_pass 127.0.0.1:9000;
+fastcgi_pass unix:/run/php/php8.4-fpm.sock;
 SNIP"
 
     log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
@@ -429,21 +429,11 @@ SCRIPT
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 check() {
-    local NAME=$1 PORT=$2
-    # Sử dụng netstat để kiểm tra cổng chính xác hơn (đòi hỏi net-tools)
-    if netstat -tuln | grep -q ":$PORT "; then
-        echo -e "  ${GREEN}● RUNNING${NC}  $1 (Port $PORT)"
+    local NAME=$1 CHECK=$2
+    if eval "$CHECK" > /dev/null 2>&1; then
+        echo -e "  ${GREEN}● RUNNING${NC}  $1"
     else
-        # Một số dịch vụ không check bằng port được
-        if [[ "$PORT" == "pgrep" ]]; then
-            if pgrep -f "$1" > /dev/null 2>&1; then
-                echo -e "  ${GREEN}● RUNNING${NC}  $1"
-            else
-                echo -e "  ${RED}○ STOPPED${NC}  $1"
-            fi
-        else
-            echo -e "  ${RED}○ STOPPED${NC}  $1"
-        fi
+        echo -e "  ${RED}○ STOPPED${NC}  $1"
     fi
 }
 
@@ -451,15 +441,15 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${CYAN}            SERVER STATUS                  ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
-check "Nginx"         "80"
-check "PHP-FPM"       "9000"
-check "MariaDB"       "3306"
-check "Redis"         "6379"
-check "PostgreSQL"    "5432"
-check "ChromaDB"      "8000"
-check "Cloudflare"    "pgrep"
-check "AutoRecover"   "pgrep"
-check "HealthCheck"   "pgrep"
+check "Nginx"         "pgrep -x nginx"
+check "PHP-FPM"       "pgrep -f php-fpm"
+check "MariaDB"       "pgrep -f mysqld"
+check "Redis"         "pgrep -f redis-server"
+check "PostgreSQL"    "pgrep -f postgres"
+check "ChromaDB"      "pgrep -f chroma"
+check "Cloudflare"    "pgrep -f cloudflared"
+check "AutoRecover"   "pgrep -f auto_recover"
+check "HealthCheck"   "pgrep -f health_check"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "  RAM  : $(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')"
@@ -645,46 +635,36 @@ log "=== Auto Recovery started ==="
 RAM_LIMIT=6500
 RAM_CRITICAL=7200
 
-    check_restart() {
-        local NAME=$1 PORT=$2 START=$3
-        if ! timeout 0.1 bash -c "cat < /dev/tcp/127.0.0.1/$PORT" >/dev/null 2>&1; then
-            # Nếu là pgrep (Cloudflare) thì dùng pgrep
-            if [[ "$PORT" == "pgrep" ]]; then
-                if pgrep -f "cloudflared" > /dev/null 2>&1; then return 0; fi
-            fi
-            log "WARN: $NAME stopped (Port $PORT), restarting..."
-            eval "$START" 2>/dev/null; sleep 3
-        fi
-    }
+while true; do
+    RAM_USED=$(free -m | awk 'NR==2{print $3}')
 
-    while true; do
-        RAM_USED=$(free -m | awk 'NR==2{print $3}')
-        if [ "$RAM_USED" -gt "$RAM_CRITICAL" ]; then
-            log "CRITICAL RAM: ${RAM_USED}MB"
-            tg_send "🚨 RAM CRITICAL: ${RAM_USED}MB - đang dọn!"
-            redis-cli flushall 2>/dev/null || true
-            sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-            sleep 10
-        elif [ "$RAM_USED" -gt "$RAM_LIMIT" ]; then
-            log "HIGH RAM: ${RAM_USED}MB"
-            redis-cli flushall 2>/dev/null || true
-        fi
+    if [ "$RAM_USED" -gt "$RAM_CRITICAL" ]; then
+        log "CRITICAL RAM: ${RAM_USED}MB"
+        tg_send "🚨 RAM CRITICAL: ${RAM_USED}MB - đang dọn!"
+        redis-cli flushall 2>/dev/null || true
+        sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+        sleep 10
+    elif [ "$RAM_USED" -gt "$RAM_LIMIT" ]; then
+        log "HIGH RAM: ${RAM_USED}MB"
+        redis-cli flushall 2>/dev/null || true
+    fi
 
-        check_restart "Nginx"      "80"   "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
-        check_restart "PHP-FPM"    "9000" "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
-        check_restart "MariaDB"    "3306" "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
-        check_restart "Redis"      "6379" "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
-        check_restart "PostgreSQL" "5432" "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start\" &"
-        check_restart "ChromaDB"   "8000" "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
-        check_restart "Cloudflare" "pgrep" "cloudflared tunnel run \$TUNNEL_NAME > /root/logs/cloudflared.log 2>&1 &"
+    check_restart "Nginx"      "pgrep -x nginx"    "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
+    check_restart "PHP-FPM"    "pgrep -f php-fpm"  "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
+    check_restart "MariaDB"    "pgrep -f mysqld"   "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
+    check_restart "Redis"      "pgrep -f redis"    "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
+    check_restart "PostgreSQL" "pgrep -f postgres" "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start\" &"
+    check_restart "ChromaDB"   "pgrep -f chroma"   "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
+    check_restart "Cloudflare" "pgrep -f cloudflared" "cloudflared tunnel run \$TUNNEL_NAME > /root/logs/cloudflared.log 2>&1 &"
 
-        # Log rotation > 10MB
-        for F in /root/logs/*.log; do
-            [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
-                mv $F ${F}.old && log "Rotated: $F"
-        done
-        sleep 45
+    # Log rotation > 10MB
+    for F in /root/logs/*.log; do
+        [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
+            mv $F ${F}.old && log "Rotated: $F"
     done
+
+    sleep 45
+done
 SCRIPT
 
     # ── backup.sh ─────────────────────────────────────────────
