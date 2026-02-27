@@ -124,8 +124,8 @@ step3_nginx_stack() {
     run_debian "mkdir -p /proc/1 && touch /proc/1/environ 2>/dev/null || true"
 
     # Thêm repo packages.sury.org/php cho Debian
-    log "Thêm Repo sury/php..."
-    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y lsb-release ca-certificates apt-transport-https curl && \\
+    log "Cấu hình Repo và cài đặt cơ bản..."
+    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y lsb-release ca-certificates apt-transport-https curl net-tools psmisc htop procps && \\
         curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg && \\
         sh -c 'echo \"deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ \$(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list' && \\
         apt update"
@@ -138,8 +138,10 @@ step3_nginx_stack() {
             php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
             php8.4-xml php8.4-zip php8.4-redis php8.4-intl php8.4-bcmath \
             php8.4-imagick php8.4-pgsql \
-            mariadb-server redis-server \
-            unzip wget curl git nano tmux python3 python3-pip python3-yaml \
+            mariadb-server redis-server wget git vim tmux \
+            python3-pip python3-full \
+            cron
+ \
            "
     fi
 
@@ -391,17 +393,18 @@ SCRIPT
     cat > "$DEBIAN_ROOT/root/scripts/stop.sh" << 'SCRIPT'
 #!/bin/bash
 echo "Dừng tất cả services..."
-pkill -f nginx 2>/dev/null || true
-pkill -f php-fpm 2>/dev/null || true
-pkill -f mysqld 2>/dev/null || true
+pkill -9 -f nginx 2>/dev/null || true
+pkill -9 -f php-fpm 2>/dev/null || true
+pkill -9 -f mysqld 2>/dev/null || true
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 [ -n "$PG_VER" ] && su - postgres -c "pg_ctlcluster $PG_VER main stop 2>/dev/null || true" 2>/dev/null || true
-pkill -f postgres 2>/dev/null || true
-pkill -f redis-server 2>/dev/null || true
-pkill -f cloudflared 2>/dev/null || true
-pkill -f chroma 2>/dev/null || true
-pkill -f auto_recover 2>/dev/null || true
-pkill -f health_check 2>/dev/null || true
+pkill -9 -f postgres 2>/dev/null || true
+pkill -9 -f redis-server 2>/dev/null || true
+pkill -9 -f cloudflared 2>/dev/null || true
+pkill -9 -f chroma 2>/dev/null || true
+pkill -9 -f auto_recover 2>/dev/null || true
+pkill -9 -f health_check 2>/dev/null || true
+rm -f /run/nginx.pid /run/php/php8.4-fpm.pid /var/run/mysqld/mysqld.pid
 echo "Đã dừng tất cả!"
 SCRIPT
 
@@ -412,10 +415,11 @@ GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 check() {
     local NAME=$1 PORT=$2
-    if timeout 0.1 bash -c "cat < /dev/tcp/127.0.0.1/$PORT" >/dev/null 2>&1; then
+    # Sử dụng netstat để kiểm tra cổng chính xác hơn (đòi hỏi net-tools)
+    if netstat -tuln | grep -q ":$PORT "; then
         echo -e "  ${GREEN}● RUNNING${NC}  $1 (Port $PORT)"
     else
-        # Một số dịch vụ không check bằng port được (như AutoRecover) thì dùng pgrep
+        # Một số dịch vụ không check bằng port được
         if [[ "$PORT" == "pgrep" ]]; then
             if pgrep -f "$1" > /dev/null 2>&1; then
                 echo -e "  ${GREEN}● RUNNING${NC}  $1"
@@ -1281,8 +1285,10 @@ case "$CMD" in
         if [ -z "$CMD" ]; then
             while true; do
                 clear
-                banner
-                echo -e "${CYAN}════════════════ CONTROL PANEL v4.2 ════════════════${NC}"
+                echo "  ╔═══════════════════════════════════════════════════╗"
+                echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
+                echo "  ╚═══════════════════════════════════════════════════╝"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v4.5 ════════════════${NC}"
                 echo -e "  1.  Khởi động Server       5. Tạo Website mới"
                 echo -e "  2.  Dừng Server            6. Danh sách Websites"
                 echo -e "  3.  Xem Trạng thái         7. Backup Telegram"
@@ -1294,12 +1300,12 @@ case "$CMD" in
                 case $OPT in
                     1) vps start; sleep 2 ;;
                     2) vps stop; sleep 2 ;;
-                    3) vps status; read -p "Bấm phím bất kỳ để về Menu..." ;;
+                    3) vps status; echo ""; read -p "Bấm Enter để về Menu..." ;;
                     4) vps monitor ;;
                     5) vps create ;;
-                    6) vps list; read -p "Bấm phím bất kỳ để về Menu..." ;;
+                    6) vps list; echo ""; read -p "Bấm Enter để về Menu..." ;;
                     7) vps backup; sleep 2 ;;
-                    8) vps debug; read -p "Báo cáo log xong. Bấm phím bất kỳ để về Menu..." ;;
+                    8) vps debug; echo ""; read -p "Báo cáo log xong. Bấm Enter để về Menu..." ;;
                     9) vps attach ;;
                     0) exit 0 ;;
                     *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
@@ -1364,10 +1370,11 @@ main() {
 
     read -p "Khởi động server ngay? (y/n): " START_NOW
     if [[ "$START_NOW" == "y" ]]; then
+        tmux kill-session -t vps 2>/dev/null || true
         tmux new-session -d -s vps 2>/dev/null || true
         tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
         echo "Đang khởi động..."
-        sleep 5
+        sleep 7
         run_debian "bash ~/scripts/status.sh"
     fi
 
