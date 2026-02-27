@@ -332,50 +332,57 @@ source ~/.vps_config 2>/dev/null || true
 GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+mkdir -p /root/logs
+exec >> /root/logs/startup.log 2>&1
+
 log "MariaDB..."
 pkill -f mysqld 2>/dev/null; sleep 1
 mkdir -p /var/run/mysqld /var/log/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql 2>/dev/null || true
-mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &
+nohup mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &
 sleep 3
 
 log "Redis..."
 mkdir -p /var/log/redis /var/run/redis
 chown -R redis:redis /var/log/redis /var/run/redis 2>/dev/null || true
-redis-server /etc/redis/redis.conf --daemonize no > ~/logs/redis.log 2>&1 &
+nohup redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &
 sleep 1
 
 log "PHP-FPM..."
 mkdir -p /run/php
-php-fpm8.4 -F -R > ~/logs/php-fpm.log 2>&1 &
+nohup php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &
 sleep 1
 
 log "Nginx..."
 mkdir -p /var/log/nginx /run
-nginx -g "daemon off;" > ~/logs/nginx.log 2>&1 &
+nohup nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
 log "PostgreSQL..."
 mkdir -p /var/run/postgresql
 chown postgres:postgres /var/run/postgresql 2>/dev/null || true
-su - postgres -c "pg_ctlcluster 17 main start >> ~/logs/startup.log 2>&1 || true" >> ~/logs/startup.log 2>&1 || true
+PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
+[ -n "$PG_VER" ] && nohup su - postgres -c "pg_ctlcluster $PG_VER main start" &
 sleep 2
 
 log "ChromaDB..."
-nohup chroma run --host 127.0.0.1 --port 8000 > ~/logs/chromadb.log 2>&1 &
+nohup chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &
 sleep 2
 
 log "Cloudflare Tunnel..."
-nohup cloudflared tunnel run $TUNNEL_NAME > ~/logs/cloudflared.log 2>&1 &
+source ~/.vps_config 2>/dev/null || true
+if [ -n "$TUNNEL_NAME" ]; then
+    nohup cloudflared tunnel run "$TUNNEL_NAME" > /root/logs/cloudflared.log 2>&1 &
+fi
 sleep 2
 
 log "Auto Recovery..."
 pkill -f auto_recover 2>/dev/null || true
-nohup bash ~/scripts/auto_recover.sh > ~/logs/auto_recover.log 2>&1 &
+nohup bash ~/scripts/auto_recover.sh > /root/logs/auto_recover.log 2>&1 &
 
 log "Health Check..."
 pkill -f health_check 2>/dev/null || true
-nohup bash ~/scripts/health_check.sh > ~/logs/health_check.log 2>&1 &
+nohup bash ~/scripts/health_check.sh > /root/logs/health_check.log 2>&1 &
 
 echo ""
 bash ~/scripts/status.sh
@@ -416,13 +423,13 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${CYAN}            SERVER STATUS                  ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
-check "Nginx"         "pgrep nginx"
-check "PHP-FPM"       "pgrep php-fpm"
-check "MariaDB"       "pgrep mysqld"
-check "Redis"         "redis-cli ping"
-check "PostgreSQL"    "pgrep postgres"
+check "Nginx"         "pgrep -x nginx"
+check "PHP-FPM"       "pgrep -f php-fpm"
+check "MariaDB"       "pgrep -f mysqld"
+check "Redis"         "pgrep -f redis-server"
+check "PostgreSQL"    "pgrep -f postgres"
 check "ChromaDB"      "pgrep -f chroma"
-check "Cloudflare"    "pgrep cloudflared"
+check "Cloudflare"    "pgrep -f cloudflared"
 check "AutoRecover"   "pgrep -f auto_recover"
 check "HealthCheck"   "pgrep -f health_check"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
@@ -1222,6 +1229,9 @@ case "$CMD" in
         proot-distro login debian --shared-tmp -- cat /root/logs/nginx.log 2>/dev/null
         echo "==== PHP-FPM LOG ===="
         proot-distro login debian --shared-tmp -- cat /root/logs/php-fpm.log 2>/dev/null
+        echo ""
+        echo "==== LOGS DIRECTORY ===="
+        proot-distro login debian --shared-tmp -- ls -la /root/logs/
         ;;
     list)
         echo ""
