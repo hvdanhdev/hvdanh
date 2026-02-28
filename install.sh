@@ -956,12 +956,17 @@ with open(config_path, 'w') as f:
 print("  Tunnel config cập nhật OK!")
 PYTHON
 
-    cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null && \
-        log "DNS $DOMAIN → OK" || \
-        warn "Xóa record DNS cũ trên Cloudflare Dashboard nếu bị lỗi!"
+    # Sử dụng TUNNEL_ID thay vì TUNNEL_NAME để chính xác tuyệt đối
+    if [ -n "$TUNNEL_ID" ]; then
+        cloudflared tunnel route dns "$TUNNEL_ID" "$DOMAIN" 2>/dev/null && \
+            log "DNS $DOMAIN → OK" || \
+            warn "Lỗi tự động thêm DNS. Hãy vào Cloudflare Dashboard xóa record cũ của '$DOMAIN' (nếu có) và thử lại."
 
-    if [ "$IS_SUBDOMAIN" = "false" ]; then
-        cloudflared tunnel route dns "$TUNNEL_NAME" "www.$DOMAIN" 2>/dev/null || true
+        if [ "$IS_SUBDOMAIN" = "false" ]; then
+            cloudflared tunnel route dns "$TUNNEL_ID" "www.$DOMAIN" 2>/dev/null || true
+        fi
+    else
+        warn "Không tìm thấy TUNNEL_ID trong .vps_config, bỏ qua route DNS tự động."
     fi
 
     pkill -HUP cloudflared 2>/dev/null || true
@@ -1141,14 +1146,9 @@ WPEOF
     fi
 
     echo ""
-    log "WordPress tạo xong!"
-    echo ""
-    echo "  URL     : https://$DOMAIN"
-    echo "  Admin   : https://$DOMAIN/wp-admin"
-    echo "  Thư mục : /var/www/$SITE_NAME"
-    echo "  DB      : $DB_NAME | User: $DB_USER"
-    echo ""
-    echo "  WP-CLI  : vps wp $DOMAIN <command>"
+    log "WordPress đã sẵn sàng (bước cuối)!"
+    warn "BẠN CẦN CHẠY LỆNH SAU ĐỂ CÀI ĐẶT DATABASE WP:"
+    echo -e "${CYAN}  vps setup-wp $DOMAIN${NC}"
     echo ""
 }
 
@@ -1422,6 +1422,39 @@ CMD=$1; shift
 run() { proot-distro login debian --shared-tmp -- bash -c "$1"; }
 
 case "$CMD" in
+    setup-wp)
+        DOMAIN=$1
+        if [ -z "$DOMAIN" ]; then
+            echo "Cách dùng: vps setup-wp <domain>"
+            exit 1
+        fi
+        echo "Cài đặt WordPress Core cho $DOMAIN..."
+        read -p "Tên Website [Thời Gian Rảnh]: " WP_TITLE
+        WP_TITLE=${WP_TITLE:-"Thời Gian Rảnh"}
+        read -p "Admin User [admin]: " WP_USER
+        WP_USER=${WP_USER:-admin}
+        read -p "Admin Email [admin@$DOMAIN]: " WP_EMAIL
+        WP_EMAIL=${WP_EMAIL:-admin@$DOMAIN}
+        read -sp "Admin Password: " WP_PASS
+        echo ""
+
+        if [ -z "$WP_PASS" ]; then
+            WP_PASS=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 12)
+            echo "Mật khẩu tự tạo: $WP_PASS"
+        fi
+
+        run "vps wp $DOMAIN core install --url='https://$DOMAIN' --title='$WP_TITLE' --admin_user='$WP_USER' --admin_password='$WP_PASS' --admin_email='$WP_EMAIL' && \
+             vps wp $DOMAIN plugin install redis-cache --activate && \
+             vps wp $DOMAIN plugin install cloudflare-flexible-ssl --activate"
+
+        echo "------------------------------------------"
+        echo "CÀI ĐẶT HOÀN TẤT!"
+        echo "URL: https://$DOMAIN"
+        echo "Admin: https://$DOMAIN/wp-admin"
+        echo "User: $WP_USER"
+        echo "Pass: $WP_PASS"
+        echo "------------------------------------------"
+        ;;
     start|restart)
         echo "Khởi động Server..."
         tmux kill-session -t vps 2>/dev/null || true
