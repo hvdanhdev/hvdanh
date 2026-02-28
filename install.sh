@@ -408,25 +408,26 @@ mkdir -p /var/run/postgresql /var/log/postgresql /var/lib/postgresql
 chown -R postgres:postgres /var/run/postgresql /var/log/postgresql /var/lib/postgresql 2>/dev/null || true
 
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
-if [ -z "$PG_VER" ]; then
+if [ -z "$PG_VER" ] || [ ! -d "/var/lib/postgresql/$PG_VER/main" ]; then
     log "Khởi tạo PostgreSQL cluster..."
-    # Chạy pg_createcluster và cấp quyền lại ngay lập tức
-    pg_createcluster 17 main --start >> /root/logs/startup.log 2>&1 || true
-    chown -R postgres:postgres /var/lib/postgresql /etc/postgresql 2>/dev/null || true
+    rm -rf /var/lib/postgresql/* /etc/postgresql/*
+    pg_createcluster 17 main >> /root/logs/startup.log 2>&1 || true
+    chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql 2>/dev/null || true
     PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 fi
 
 if [ -n "$PG_VER" ]; then
-    # Đảm bảo quyền trước khi start
-    chown -R postgres:postgres /var/lib/postgresql/$PG_VER/main 2>/dev/null || true
+    chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql 2>/dev/null || true
     su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 &
 fi
-sleep 2
+sleep 3
 
 log "ChromaDB..."
+pkill -f chroma 2>/dev/null
 chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &
 
 log "Cloudflare Tunnel..."
+pkill -f cloudflared 2>/dev/null
 if [ -n "$TUNNEL_NAME" ]; then
     cloudflared tunnel run "$TUNNEL_NAME" > /root/logs/cloudflared.log 2>&1 &
 fi
@@ -474,14 +475,14 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${CYAN}            SERVER STATUS                  ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
-check "Nginx"         "pgrep -x nginx"
-check "PHP-FPM"       "pgrep -f php-fpm"
-check "MariaDB"       "pgrep -f mysqld"
-check "Redis"         "pgrep -f redis-server"
-check "PostgreSQL"    "pgrep -f postgres"
-check "ChromaDB"      "pgrep -f chroma"
-check "Cloudflare"    "pgrep -f cloudflared"
-check "AutoRecover"   "pgrep -f auto_recover"
+check "Nginx"         "ps aux | grep -v grep | grep -q nginx"
+check "PHP-FPM"       "ps aux | grep -v grep | grep -q php-fpm"
+check "MariaDB"       "ps aux | grep -v grep | grep -q mysqld"
+check "Redis"         "ps aux | grep -v grep | grep -q redis-server"
+check "PostgreSQL"    "ps aux | grep -v grep | grep -q postgres"
+check "ChromaDB"      "ps aux | grep -v grep | grep -q chroma"
+check "Cloudflare"    "ps aux | grep -v grep | grep -q cloudflared"
+check "AutoRecover"   "ps aux | grep -v grep | grep -q auto_recover"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "  RAM  : $(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')"
@@ -1343,7 +1344,7 @@ PYTHON
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.7 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.8 ════════════════${NC}"
                 echo -e "  1. Khởi động Server        6. Danh sách Websites"
                 echo -e "  2. Dừng Server             7. Xóa Website"
                 echo -e "  3. Xem Trạng thái          8. Backup Telegram"
