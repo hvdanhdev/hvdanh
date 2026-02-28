@@ -935,7 +935,7 @@ except Exception as e:
 
 new_rules = [{'hostname': '${DOMAIN}', 'service': '${SERVICE_URL}'}]
 
-if not ${IS_SUBDOMAIN}:
+if "${IS_SUBDOMAIN}" == "false":
     new_rules.append({'hostname': 'www.${DOMAIN}', 'service': '${SERVICE_URL}'})
 
 existing = [r for r in config.get('ingress', []) if 'hostname' in r]
