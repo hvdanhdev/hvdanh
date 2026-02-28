@@ -1,14 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  Android VPS Installer v3.0
+#  Android VPS Installer v4.0
 #  Stack: Nginx + PHP-FPM + MariaDB + Redis + PostgreSQL
 #         + ChromaDB + WP-CLI + Cloudflare Tunnel
-#  Tính năng: Multi-site, Subdomain, Backup Telegram,
-#             Auto Recovery, Health Check, Security, Monitor
+#  Kiến trúc mới: Fix gốc rễ tất cả lỗi proot/auth/menu
 # ============================================================
-
-# KHÔNG dùng set -e vì Android OOM Killer có thể giết ngang tiến trình apt
-# Nếu dùng set -e, script sẽ dừng hoàn toàn và không chạy đến các bước quan trọng
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,7 +17,7 @@ DEBIAN_ROOT="/data/data/com.termux/files/usr/var/lib/proot-distro/installed-root
 
 log()     { echo -e "${GREEN}[✓]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
-error()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+error()   { echo -e "${RED}[✗]${NC} $1"; }
 info()    { echo -e "${CYAN}[i]${NC} $1"; }
 section() {
     echo ""
@@ -34,7 +30,7 @@ banner() {
 cat << 'EOF'
 
   ╔═══════════════════════════════════════════════════╗
-  ║         ANDROID VPS INSTALLER v3.0               ║
+  ║         ANDROID VPS INSTALLER v4.0               ║
   ║  Nginx · PHP-FPM · MariaDB · Redis · WP-CLI      ║
   ║  PostgreSQL · ChromaDB · Cloudflare Tunnel        ║
   ║  Backup Telegram · Health Check · Security        ║
@@ -44,6 +40,7 @@ cat << 'EOF'
 EOF
 }
 
+# ─── Helper chạy lệnh trong Debian ────────────────────────
 run_debian() {
     proot-distro login debian --shared-tmp -- bash -c "$1"
 }
@@ -53,44 +50,40 @@ run_debian() {
 # ============================================================
 step1_termux() {
     section "BƯỚC 1: Cài đặt Termux packages + SSH"
+
     if command -v proot-distro > /dev/null; then
-        warn "Termux tools đã có sẵn, bỏ qua cập nhật package để tiết kiệm thời gian..."
+        warn "Termux tools đã có sẵn, bỏ qua cập nhật package..."
     else
         log "Cập nhật package..."
         pkg update -y && pkg upgrade -y
         log "Cài tools..."
         pkg install -y proot-distro wget curl git openssh python tmux
     fi
+
     termux-setup-storage || true
+
     grep -q 'alias debian=' ~/.bashrc 2>/dev/null || \
         echo 'alias debian="proot-distro login debian --shared-tmp"' >> ~/.bashrc
 
-    # Cài openssh nếu chưa có
     if ! command -v sshd > /dev/null; then
-        log "Cài đặt openssh..."
         pkg install -y openssh
     fi
 
-    # Luôn hỏi đặt mật khẩu SSH khi cài mới (chưa có file sshd_config)
-    # hoặc khi người dùng muốn đặt lại
-    if [ ! -f "$PREFIX/etc/ssh/sshd_config" ] || [ ! -f "$HOME/.ssh_password_set" ]; then
+    if [ ! -f "$HOME/.ssh_password_set" ]; then
         log "Cài đặt SSH server..."
         echo ""
         warn "Đặt password SSH để kết nối từ máy tính (Bitvise):"
         passwd
         touch "$HOME/.ssh_password_set"
     else
-        warn "SSH đã cài đặt trước đó, bỏ qua đặt password."
+        warn "SSH đã cài đặt trước đó."
         read -p "Bạn có muốn đặt lại password SSH? (y/n): " RESET_PW
         if [[ "$RESET_PW" == "y" ]]; then
             passwd
         fi
     fi
 
-    # Khởi động SSH
     sshd 2>/dev/null || true
-
-    # Tự động khởi động SSH khi Termux mở
     grep -q 'sshd' ~/.bashrc 2>/dev/null || \
         echo 'sshd 2>/dev/null || true' >> ~/.bashrc
 
@@ -98,16 +91,18 @@ step1_termux() {
 }
 
 # ============================================================
-# BƯỚC 2: UBUNTU
+# BƯỚC 2: DEBIAN PROOT
 # ============================================================
 step2_debian() {
     section "BƯỚC 2: Cài Debian proot"
+
     if [ -d "$DEBIAN_ROOT" ] && [ -f "$DEBIAN_ROOT/etc/debian_version" ]; then
         warn "Debian đã cài, bỏ qua tải xuống..."
     else
-        log "Cài Debian Trixie (testing)..."
+        log "Cài Debian..."
         proot-distro install debian || true
     fi
+
     log "Debian xong!"
 }
 
@@ -120,9 +115,9 @@ step3_nginx_stack() {
     log "Cập nhật Debian..."
     if run_debian "command -v nginx > /dev/null"; then
         warn "Dịch vụ đã cài đặt, bỏ qua apt upgrade..."
-        run_debian "apt update"
+        run_debian "apt update -qq"
     else
-        run_debian "apt update && apt upgrade -y"
+        run_debian "apt update -qq && DEBIAN_FRONTEND=noninteractive apt upgrade -y"
     fi
 
     log "Tạo thư mục cần thiết..."
@@ -131,34 +126,30 @@ step3_nginx_stack() {
         /var/log/nginx /var/log/redis /var/log/php \
         /var/www /run/php"
 
-    # Chặn invoke-rc.d tự start service khi apt cài (proot không có systemd)
+    # Chặn invoke-rc.d tự start service (proot không có systemd)
     log "Cấu hình policy-rc.d..."
     run_debian "echo $'#!/bin/sh\nexit 101' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
+    run_debian "ln -sf /bin/true /sbin/sysctl 2>/dev/null || true"
 
-    # Fix lỗi dpkg-realpath và sysctl trigger trong Termux proot
-    run_debian "ln -sf /bin/true /sbin/sysctl"
-    run_debian "mkdir -p /proc/1 && touch /proc/1/environ 2>/dev/null || true"
-
-    # Thêm repo packages.sury.org/php cho Debian
-    log "Cấu hình Repo và cài đặt cơ bản..."
-    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y lsb-release ca-certificates apt-transport-https curl net-tools psmisc htop procps && \\
-        curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg && \\
-        sh -c 'echo \"deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ \$(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list' && \\
-        apt update"
+    # Thêm repo sury.org cho PHP mới nhất
+    log "Cấu hình Repo PHP sury.org..."
+    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y lsb-release ca-certificates apt-transport-https curl net-tools psmisc htop procps 2>/dev/null && \
+        curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg && \
+        sh -c 'echo \"deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ \$(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list' && \
+        apt update -qq"
 
     if run_debian "command -v nginx > /dev/null"; then
         warn "Nginx đã có sẵn, bỏ qua cài đặt gói..."
     else
+        log "Cài Nginx, PHP, MariaDB, Redis..."
         run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
             nginx \
             php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
             php8.4-xml php8.4-zip php8.4-redis php8.4-intl php8.4-bcmath \
             php8.4-imagick php8.4-pgsql \
             mariadb-server redis-server wget git vim tmux \
-            python3-pip python3-full \
-            cron
- \
-           "
+            python3-pip python3-full python3-yaml \
+            cron"
     fi
 
     log "Cài WP-CLI..."
@@ -166,7 +157,6 @@ step3_nginx_stack() {
         -O /usr/local/bin/wp && chmod +x /usr/local/bin/wp"
 
     log "Cấu hình Nginx chính..."
-    run_debian "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets"
     run_debian "cat > /etc/nginx/nginx.conf << 'NGINX'
 user www-data;
 worker_processes 1;
@@ -190,18 +180,15 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
-    # Gzip
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
     gzip_types text/plain text/css application/json application/javascript
                text/xml application/xml image/svg+xml;
 
-    # Rate limiting zones
     limit_req_zone \$binary_remote_addr zone=wp_login:10m rate=5r/m;
     limit_req_zone \$binary_remote_addr zone=api:10m rate=30r/m;
 
-    # Logging
     access_log /var/log/nginx/access.log;
     error_log /var/log/nginx/error.log;
 
@@ -220,11 +207,10 @@ NGINX"
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
 
     log "Cấu hình Redis..."
-    run_debian "mkdir -p /etc/redis"
     run_debian "cat > /etc/redis/redis.conf << 'REDIS'
 bind 127.0.0.1
 port 6379
-maxmemory 64mb
+maxmemory 128mb
 maxmemory-policy allkeys-lru
 save \"\"
 tcp-keepalive 60
@@ -232,10 +218,12 @@ loglevel warning
 logfile /var/log/redis/redis-server.log
 REDIS"
     run_debian "mkdir -p /var/log/redis && chown redis:redis /var/log/redis 2>/dev/null || true"
+
     run_debian "rm -f /etc/nginx/sites-enabled/default"
-    # Tạo snippets fastcgi-php nếu chưa có
+
+    # Snippets fastcgi-php
     run_debian "cat > /etc/nginx/snippets/fastcgi-php.conf << 'SNIP'
-fastcgi_split_path_info ^(.+\\.php)(/.+)\$;
+fastcgi_split_path_info ^(.+\.php)(/.+)\$;
 try_files \$fastcgi_script_name =404;
 set \$path_info \$fastcgi_path_info;
 fastcgi_param PATH_INFO \$path_info;
@@ -244,29 +232,61 @@ include fastcgi.conf;
 fastcgi_pass unix:/run/php/php8.4-fpm.sock;
 SNIP"
 
-    log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
+    # ── FIX MARIADB AUTH (gốc rễ lỗi ERROR 1698) ──────────
+    # Vấn đề cũ: mysqld_safe chạy từ Termux nhưng socket trong proot → khác môi trường
+    # Giải pháp: tạo script init-mariadb.sh chạy TRONG proot, dùng --skip-grant-tables
+    # đúng cách, sau đó dùng unix_socket plugin cho root (không cần password)
+    log "Cấu hình MariaDB auth đúng cách (trong proot)..."
+    run_debian "cat > /root/init_mariadb.sh << 'INITDB'
+#!/bin/bash
+# Đảm bảo thư mục và quyền
+mkdir -p /var/run/mysqld /var/log/mysql /var/lib/mysql
+chown -R mysql:mysql /var/run/mysqld /var/log/mysql /var/lib/mysql 2>/dev/null
 
-    log "Fix lỗi MariaDB root access (v7.0 Final Hope)..."
-    run_debian "cat > /root/.my.cnf << 'EOF'
-[client]
-user=vps_root
-password=
-socket=/run/mysqld/mysqld.sock
-EOF"
-    run_debian "chmod 600 /root/.my.cnf"
-    
-    # Khởi động MariaDB tạm thời để cấu hình auth
-    mysqld_safe --user=mysql --skip-networking --skip-grant-tables &
-    sleep 10
-    mariadb << SQL
+# Khởi tạo data dir nếu chưa có
+if [ ! -d /var/lib/mysql/mysql ]; then
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql > /dev/null 2>&1
+fi
+
+# Khởi động tạm với skip-grant-tables để sửa auth
+mysqld --user=mysql --skip-networking --skip-grant-tables \
+    --socket=/var/run/mysqld/mysqld.sock \
+    --pid-file=/var/run/mysqld/mysqld_init.pid > /dev/null 2>&1 &
+INIT_PID=$!
+sleep 5
+
+# Fix auth: root dùng unix_socket (không cần password khi root)
+# vps_admin là user để script dùng (native password)
+mysql --socket=/var/run/mysqld/mysqld.sock << SQL
 FLUSH PRIVILEGES;
-CREATE USER IF NOT EXISTS 'vps_root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
-GRANT ALL PRIVILEGES ON *.* TO 'vps_root'@'localhost' WITH GRANT OPTION;
-ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
+ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;
+DELETE FROM mysql.user WHERE User='vps_admin';
+CREATE USER 'vps_admin'@'localhost' IDENTIFIED BY 'vpsadmin2024';
+GRANT ALL PRIVILEGES ON *.* TO 'vps_admin'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
-    pkill -9 -f mysqld
-    sleep 3
+
+# Dừng instance tạm
+kill $INIT_PID 2>/dev/null
+sleep 3
+pkill -f mysqld 2>/dev/null
+sleep 2
+
+echo "MariaDB auth OK"
+INITDB"
+    run_debian "chmod +x /root/init_mariadb.sh"
+    run_debian "bash /root/init_mariadb.sh"
+
+    # Tạo file .my.cnf dùng vps_admin (để mariadb command tự authenticate)
+    run_debian "cat > /root/.my.cnf << 'EOF'
+[client]
+user=vps_admin
+password=vpsadmin2024
+socket=/var/run/mysqld/mysqld.sock
+EOF"
+    run_debian "chmod 600 /root/.my.cnf"
+
+    log "Nginx + PHP-FPM + MariaDB + Redis xong!"
 }
 
 # ============================================================
@@ -277,14 +297,48 @@ step4_extra() {
 
     log "Cài Node.js 20..."
     run_debian "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
-        apt install -y nodejs"
+        DEBIAN_FRONTEND=noninteractive apt install -y nodejs"
 
     log "Cài PostgreSQL..."
-    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
-        postgresql postgresql-contrib"
+    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y postgresql postgresql-contrib"
+
+    # ── FIX POSTGRESQL (gốc rễ lỗi khởi động trong proot) ──
+    # Vấn đề: pg_ctlcluster cần kernel features không có trong proot
+    # Giải pháp: dùng pg_ctl trực tiếp với su - postgres
+    log "Khởi tạo PostgreSQL cluster đúng cách..."
+    run_debian "cat > /root/init_postgres.sh << 'INITPG'
+#!/bin/bash
+PG_VER=\$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
+if [ -z \"\$PG_VER\" ]; then
+    echo \"Không tìm thấy PostgreSQL\"
+    exit 1
+fi
+
+PG_DATA=\"/var/lib/postgresql/\$PG_VER/main\"
+PG_CONF=\"/etc/postgresql/\$PG_VER/main\"
+
+mkdir -p /var/run/postgresql /var/log/postgresql
+chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null
+
+# Khởi tạo cluster nếu chưa có
+if [ ! -f \"\$PG_DATA/PG_VERSION\" ]; then
+    rm -rf \"\$PG_DATA\"
+    mkdir -p \"\$PG_DATA\"
+    chown -R postgres:postgres \"\$PG_DATA\"
+    su - postgres -c \"pg_ctl initdb -D \$PG_DATA\" 2>&1
+fi
+
+# Cấu hình listen trên unix socket
+sed -i \"s|#unix_socket_directories.*|unix_socket_directories = '/var/run/postgresql'|\" \
+    \"\$PG_CONF/postgresql.conf\" 2>/dev/null || true
+
+echo \"PostgreSQL cluster OK: \$PG_VER\"
+INITPG"
+    run_debian "chmod +x /root/init_postgres.sh"
+    run_debian "bash /root/init_postgres.sh"
 
     log "Cài ChromaDB..."
-    run_debian "pip3 install chromadb --break-system-packages"
+    run_debian "pip3 install chromadb --break-system-packages --quiet"
 
     log "Node.js + PostgreSQL + ChromaDB xong!"
 }
@@ -298,12 +352,13 @@ step5_cloudflared() {
     log "Tải cloudflared ARM64..."
     run_debian "wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 \
         -O /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared"
-    run_debian "grep -q '/usr/local/bin' ~/.bashrc || \
-        echo 'export PATH=\$PATH:/usr/local/bin:/root/.local/bin' >> ~/.bashrc"
+    run_debian "grep -q '/usr/local/bin' /root/.bashrc || \
+        echo 'export PATH=\$PATH:/usr/local/bin:/root/.local/bin' >> /root/.bashrc"
 
     if [ ! -f "$DEBIAN_ROOT/root/.cloudflared/cert.pem" ]; then
         echo ""
         warn "Sắp đăng nhập Cloudflare - copy link hiện ra và mở trên trình duyệt!"
+        warn "Sau khi đăng nhập xong, link sẽ tự redirect và Termux sẽ tiếp tục."
         echo ""
         run_debian "cloudflared tunnel login"
     else
@@ -314,16 +369,17 @@ step5_cloudflared() {
     read -p "$(echo -e ${CYAN}Nhập tên tunnel [my-server]: ${NC})" TUNNEL_NAME
     TUNNEL_NAME=${TUNNEL_NAME:-my-server}
 
-    log "Cấu hình tunnel: $TUNNEL_NAME"
-    # Xóa tunnel cũ nếu có để tránh lỗi credentials cũ không tồn tại
-    run_debian "cloudflared tunnel delete -f $TUNNEL_NAME 2>/dev/null || true"
-    run_debian "cloudflared tunnel create $TUNNEL_NAME 2>/dev/null || true"
+    log "Xóa tunnel cũ nếu có..."
+    run_debian "cloudflared tunnel delete -f '$TUNNEL_NAME' 2>/dev/null || true"
 
-    TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null | grep '$TUNNEL_NAME' | awk '{print \$1}'")
+    log "Tạo tunnel: $TUNNEL_NAME"
+    run_debian "cloudflared tunnel create '$TUNNEL_NAME' 2>/dev/null || true"
+
+    TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null | grep '$TUNNEL_NAME' | awk '{print \$1}'" 2>/dev/null)
     log "Tunnel ID: $TUNNEL_ID"
 
-    run_debian "mkdir -p ~/.cloudflared"
-    run_debian "cat > ~/.cloudflared/config.yml << EOF
+    run_debian "mkdir -p /root/.cloudflared"
+    run_debian "cat > /root/.cloudflared/config.yml << EOF
 tunnel: $TUNNEL_ID
 credentials-file: /root/.cloudflared/$TUNNEL_ID.json
 
@@ -336,6 +392,7 @@ TUNNEL_NAME=$TUNNEL_NAME
 TUNNEL_ID=$TUNNEL_ID
 TG_ENABLED=false
 EOF
+
     log "Cloudflare Tunnel xong!"
 }
 
@@ -359,7 +416,7 @@ step6_telegram() {
         echo "TG_CHAT_ID=$TG_CHAT_ID" >> "$DEBIAN_ROOT/root/.vps_config"
         log "Telegram đã cấu hình!"
     else
-        warn "Bỏ qua. Sửa ~/.vps_config trong Debian để thêm sau."
+        warn "Bỏ qua. Sửa /root/.vps_config trong Debian để thêm sau."
     fi
 }
 
@@ -368,7 +425,8 @@ step6_telegram() {
 # ============================================================
 step7_scripts() {
     section "BƯỚC 7: Tạo scripts quản lý"
-    run_debian "mkdir -p ~/scripts ~/logs ~/backup ~/projects"
+
+    run_debian "mkdir -p /root/scripts /root/logs /root/backup /root/projects"
 
     # ── start.sh ──────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/start.sh" << 'SCRIPT'
@@ -379,85 +437,131 @@ source /root/.vps_config 2>/dev/null || true
 GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[✓]${NC} $1" | tee -a /root/logs/startup.log; }
 
-mkdir -p /root/logs && chmod 777 /root/logs
-echo "--- VPS START UP: $(date) ---" > /root/logs/startup.log
+mkdir -p /root/logs
+echo "--- VPS START: $(date) ---" > /root/logs/startup.log
 
+# ─── MariaDB ───────────────────────────────────────────────
 log "MariaDB..."
-pkill -f mysqld 2>/dev/null; sleep 1
+pkill -f mysqld 2>/dev/null; sleep 2
 mkdir -p /var/run/mysqld /var/log/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql 2>/dev/null || true
-mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &
-sleep 2
 
+# Khởi tạo datadir nếu chưa có
+if [ ! -d /var/lib/mysql/mysql ]; then
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql > /dev/null 2>&1
+fi
+
+mysqld --user=mysql \
+    --socket=/var/run/mysqld/mysqld.sock \
+    --pid-file=/var/run/mysqld/mysqld.pid \
+    > /var/log/mysql/error.log 2>&1 &
+sleep 3
+
+# Kiểm tra MariaDB khởi động thành công
+if ! mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null; then
+    echo "[!] MariaDB chưa sẵn sàng, đợi thêm..." | tee -a /root/logs/startup.log
+    sleep 5
+fi
+
+# ─── Redis ─────────────────────────────────────────────────
 log "Redis..."
 mkdir -p /var/log/redis /var/run/redis
 chown -R redis:redis /var/log/redis /var/run/redis 2>/dev/null || true
 redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &
 sleep 1
 
+# ─── PHP-FPM ───────────────────────────────────────────────
 log "PHP-FPM..."
 mkdir -p /run/php
 php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &
 sleep 1
 
+# ─── Nginx ─────────────────────────────────────────────────
 log "Nginx..."
 mkdir -p /var/log/nginx /run
 nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
+# ─── PostgreSQL ────────────────────────────────────────────
+# FIX: dùng pg_ctl trực tiếp, không dùng pg_ctlcluster (cần systemd)
 log "PostgreSQL..."
-mkdir -p /var/run/postgresql /var/log/postgresql /var/lib/postgresql
-chown -R postgres:postgres /var/run/postgresql /var/log/postgresql /var/lib/postgresql 2>/dev/null || true
-
-PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
-if [ -z "$PG_VER" ] || [ ! -d "/var/lib/postgresql/$PG_VER/main" ]; then
-    log "Khởi tạo PostgreSQL cluster..."
-    rm -rf /var/lib/postgresql/* /etc/postgresql/*
-    pg_createcluster 17 main >> /root/logs/startup.log 2>&1 || true
-    # Cấp quyền lại từ gốc cho PostgreSQL
-    chown -R postgres:postgres /var/lib/postgresql /etc/postgresql /var/run/postgresql /var/log/postgresql 2>/dev/null || true
-    PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
-fi
-
+PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
 if [ -n "$PG_VER" ]; then
-    # Cấp quyền triệt để trước khi start
-    chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql 2>/dev/null || true
-    su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 &
-fi
-sleep 3
+    PG_DATA="/var/lib/postgresql/$PG_VER/main"
+    mkdir -p /var/run/postgresql /var/log/postgresql
+    chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null || true
 
+    # Khởi tạo nếu chưa có
+    if [ ! -f "$PG_DATA/PG_VERSION" ]; then
+        mkdir -p "$PG_DATA"
+        chown -R postgres:postgres "$PG_DATA"
+        su - postgres -c "pg_ctl initdb -D $PG_DATA" >> /root/logs/startup.log 2>&1
+        # Cấu hình socket
+        PG_CONF="/etc/postgresql/$PG_VER/main/postgresql.conf"
+        sed -i "s|#unix_socket_directories.*|unix_socket_directories = '/var/run/postgresql'|" \
+            "$PG_CONF" 2>/dev/null || true
+    fi
+
+    # Start PostgreSQL
+    su - postgres -c "pg_ctl start -D $PG_DATA \
+        -l /var/log/postgresql/postgresql.log \
+        -w -t 30" >> /root/logs/startup.log 2>&1 &
+    sleep 4
+else
+    echo "[!] PostgreSQL chưa cài" | tee -a /root/logs/startup.log
+fi
+
+# ─── ChromaDB ──────────────────────────────────────────────
 log "ChromaDB..."
 pkill -f chroma 2>/dev/null
 chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &
+sleep 2
 
+# ─── Cloudflare Tunnel ─────────────────────────────────────
 log "Cloudflare Tunnel..."
 pkill -f cloudflared 2>/dev/null
-if [ -n "$TUNNEL_NAME" ]; then
-    cloudflared tunnel run "$TUNNEL_NAME" > /root/logs/cloudflared.log 2>&1 &
+if [ -n "$TUNNEL_NAME" ] && [ -f "/root/.cloudflared/config.yml" ]; then
+    cloudflared tunnel --config /root/.cloudflared/config.yml run "$TUNNEL_NAME" \
+        > /root/logs/cloudflared.log 2>&1 &
+    sleep 2
+else
+    echo "[!] Cloudflare chưa cấu hình" | tee -a /root/logs/startup.log
 fi
 
-log "Auto Recovery Loop..."
+log "Health Check daemon..."
+pkill -f health_check.sh 2>/dev/null
+nohup bash /root/scripts/health_check.sh > /root/logs/health_check.log 2>&1 &
+
 echo "--- ALL SERVICES STARTED ---" | tee -a /root/logs/startup.log
-# Chạy auto_recover ở foreground để giữ session proot luôn sống
-bash /root/scripts/auto_recover.sh
+
+# Auto Recovery chạy foreground để giữ proot session sống
+exec bash /root/scripts/auto_recover.sh
 SCRIPT
 
     # ── stop.sh ───────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/stop.sh" << 'SCRIPT'
 #!/bin/bash
 echo "Dừng tất cả services..."
-pkill -9 -f nginx 2>/dev/null || true
-pkill -9 -f php-fpm 2>/dev/null || true
-pkill -9 -f mysqld 2>/dev/null || true
-PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
-[ -n "$PG_VER" ] && su - postgres -c "pg_ctlcluster $PG_VER main stop 2>/dev/null || true" 2>/dev/null || true
-pkill -9 -f postgres 2>/dev/null || true
-pkill -9 -f redis-server 2>/dev/null || true
-pkill -9 -f cloudflared 2>/dev/null || true
-pkill -9 -f chroma 2>/dev/null || true
-pkill -9 -f auto_recover 2>/dev/null || true
-pkill -9 -f health_check 2>/dev/null || true
-rm -f /run/nginx.pid /run/php/php8.4-fpm.pid /var/run/mysqld/mysqld.pid
+pkill -9 -f "nginx" 2>/dev/null || true
+pkill -9 -f "php-fpm" 2>/dev/null || true
+
+# PostgreSQL: dừng đúng cách
+PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
+if [ -n "$PG_VER" ]; then
+    PG_DATA="/var/lib/postgresql/$PG_VER/main"
+    su - postgres -c "pg_ctl stop -D $PG_DATA -m fast" 2>/dev/null || true
+fi
+pkill -9 -f "postgres" 2>/dev/null || true
+
+pkill -9 -f "mysqld" 2>/dev/null || true
+pkill -9 -f "redis-server" 2>/dev/null || true
+pkill -9 -f "cloudflared" 2>/dev/null || true
+pkill -9 -f "chroma" 2>/dev/null || true
+pkill -9 -f "auto_recover.sh" 2>/dev/null || true
+pkill -9 -f "health_check.sh" 2>/dev/null || true
+
+rm -f /run/nginx.pid /run/php/php8.4-fpm.pid \
+      /var/run/mysqld/mysqld.pid /var/run/postgresql/.s.PGSQL.*.lock 2>/dev/null
 echo "Đã dừng tất cả!"
 SCRIPT
 
@@ -479,14 +583,14 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${CYAN}            SERVER STATUS                  ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
-check "Nginx"         "ps aux | grep -v grep | grep -q nginx"
-check "PHP-FPM"       "ps aux | grep -v grep | grep -q php-fpm"
-check "MariaDB"       "ps aux | grep -v grep | grep -q mysqld"
-check "Redis"         "ps aux | grep -v grep | grep -q redis-server"
-check "PostgreSQL"    "ps aux | grep -v grep | grep -q postgres"
-check "ChromaDB"      "ps aux | grep -v grep | grep -q chroma"
-check "Cloudflare"    "ps aux | grep -v grep | grep -q cloudflared"
-check "AutoRecover"   "ps aux | grep -v grep | grep -q auto_recover"
+check "Nginx"         "pgrep -x nginx"
+check "PHP-FPM"       "pgrep -f php-fpm"
+check "MariaDB"       "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null"
+check "Redis"         "redis-cli ping 2>/dev/null | grep -q PONG"
+check "PostgreSQL"    "su - postgres -c 'pg_ctl status -D \$(ls /var/lib/postgresql/*/main -d 2>/dev/null | tail -1)' 2>/dev/null | grep -q 'server is running'"
+check "ChromaDB"      "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null"
+check "Cloudflare"    "pgrep -f cloudflared"
+check "AutoRecover"   "pgrep -f auto_recover.sh"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "  RAM  : $(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')"
@@ -505,12 +609,10 @@ SCRIPT
     # ── monitor.sh ────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/monitor.sh" << 'SCRIPT'
 #!/bin/bash
-# Real-time monitor: RAM, CPU, Nginx requests, top processes
 export TERM=xterm-256color
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 
 echo -e "${CYAN}Monitor đang chạy... Ctrl+C để thoát${NC}"
-echo ""
 
 while true; do
     clear
@@ -520,10 +622,9 @@ while true; do
     echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # RAM
-    RAM=$(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')
     RAM_PCT=$(free -m | awk 'NR==2{printf "%.0f", $3*100/$2}')
     RAM_PCT=${RAM_PCT:-0}
+    RAM=$(free -m | awk 'NR==2{printf "%s/%s MB (%d%%)", $3,$2,$3*100/$2}')
     if [ "$RAM_PCT" -gt 80 ]; then
         echo -e "  RAM  : ${RED}$RAM${NC}"
     elif [ "$RAM_PCT" -gt 60 ]; then
@@ -532,44 +633,32 @@ while true; do
         echo -e "  RAM  : ${GREEN}$RAM${NC}"
     fi
 
-    # CPU Load
-    LOAD=$(uptime | awk -F'load average:' '{print $2}')
-    echo "  Load :$LOAD"
-
-    # Disk
+    echo "  Load : $(uptime | awk -F'load average:' '{print $2}')"
     echo "  Disk : $(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')"
     echo ""
 
-    # Nginx stats
-    echo -e "${CYAN}  NGINX:${NC}"
-    NGINX_PROC=$(pgrep nginx | wc -l)
-    echo "  Processes: $NGINX_PROC"
-
-    # Recent requests (last 10)
-    if [ -f /var/log/nginx/access.log ]; then
-        echo "  Requests/min (last): $(tail -100 /var/log/nginx/access.log 2>/dev/null | \
-            awk -v d="$(date '+%d/%b/%Y:%H:%M')" '$0 ~ d {count++} END {print count+0}')"
-        echo ""
-        echo -e "${CYAN}  RECENT REQUESTS:${NC}"
-        tail -5 /var/log/nginx/access.log 2>/dev/null | \
-            awk '{print "  " $1" "$7" "$9}' || echo "  (no log)"
-    fi
-    echo ""
-
-    # Top processes
-    echo -e "${CYAN}  TOP PROCESSES:${NC}"
-    ps aux 2>/dev/null | awk 'NR>1 && NR<=7 {
-        printf "  %-20s CPU:%-5s MEM:%-5s\n", $11, $3, $4
-    }' || true
-
-    echo ""
     echo -e "${CYAN}  SERVICES:${NC}"
-    for svc in nginx "php-fpm" mysqld redis-server postgres cloudflared; do
+    for svc in nginx "php-fpm" mysqld redis-server postgres cloudflared chroma; do
         if pgrep -f "$svc" > /dev/null 2>&1; then
             echo -e "  ${GREEN}●${NC} $svc"
         else
             echo -e "  ${RED}○${NC} $svc"
         fi
+    done
+
+    echo ""
+    if [ -f /var/log/nginx/access.log ]; then
+        echo -e "${CYAN}  RECENT REQUESTS:${NC}"
+        tail -5 /var/log/nginx/access.log 2>/dev/null | \
+            awk '{print "  " $1" "$7" "$9}' || echo "  (no log)"
+    fi
+
+    echo ""
+    echo -e "${CYAN}  WEBSITES:${NC}"
+    for conf in /etc/nginx/sites-enabled/*; do
+        [ -f "$conf" ] || continue
+        domain=$(grep -m1 "server_name" "$conf" 2>/dev/null | awk '{print $2}' | tr -d ';')
+        [ -n "$domain" ] && echo "  → https://$domain"
     done
 
     sleep 3
@@ -579,11 +668,9 @@ SCRIPT
     # ── health_check.sh ───────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/health_check.sh" << 'SCRIPT'
 #!/bin/bash
-# Gửi heartbeat Telegram mỗi 5 phút
-# Nếu không nhận được tin nhắn > 10 phút = server có vấn đề
-source ~/.vps_config 2>/dev/null || true
+source /root/.vps_config 2>/dev/null || true
 
-LOG=~/logs/health_check.log
+LOG=/root/logs/health_check.log
 INTERVAL=300  # 5 phút
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG; }
@@ -596,34 +683,24 @@ tg_send() {
         -d parse_mode="HTML" > /dev/null 2>&1
 }
 
-log "Health Check daemon started"
-
-# Gửi thông báo khởi động
+log "Health Check started"
 tg_send "🚀 <b>Android VPS Online</b>
 ⏰ $(date '+%H:%M %d/%m/%Y')
 📱 RAM: $(free -m | awk 'NR==2{printf "%s/%s MB", $3,$2}')
 💾 Disk: $(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')"
 
-LAST_REPORT=$(date +%s)
-
 while true; do
     sleep $INTERVAL
-
-    NOW=$(date +%s)
-    UPTIME_MIN=$(( (NOW - LAST_REPORT) / 60 ))
 
     RAM_USED=$(free -m | awk 'NR==2{print $3}')
     RAM_TOTAL=$(free -m | awk 'NR==2{print $2}')
     RAM_PCT=$(free -m | awk 'NR==2{printf "%.0f", $3*100/$2}')
     DISK=$(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')
-
-    # Đếm websites đang chạy
     SITES=$(ls /etc/nginx/sites-enabled/ 2>/dev/null | wc -l)
 
-    # Icon RAM theo mức
-    if [ "$RAM_PCT" -gt 80 ]; then
+    if [ "${RAM_PCT:-0}" -gt 80 ]; then
         RAM_ICON="🔴"
-    elif [ "$RAM_PCT" -gt 60 ]; then
+    elif [ "${RAM_PCT:-0}" -gt 60 ]; then
         RAM_ICON="🟡"
     else
         RAM_ICON="🟢"
@@ -635,7 +712,6 @@ ${RAM_ICON} RAM: ${RAM_USED}/${RAM_TOTAL} MB (${RAM_PCT}%)
 💾 Disk: $DISK
 🌐 Sites: $SITES đang chạy"
 
-    LAST_REPORT=$NOW
     log "Heartbeat sent. RAM: ${RAM_PCT}%"
 done
 SCRIPT
@@ -658,8 +734,9 @@ tg_send() {
 check_restart() {
     local NAME=$1 CHECK=$2 START=$3
     if ! eval "$CHECK" > /dev/null 2>&1; then
-        log "WARN: $NAME stopped, restarting..."
-        eval "$START" 2>/dev/null; sleep 3
+        log "WARN: $NAME stopped → restarting..."
+        eval "$START" 2>/dev/null
+        sleep 4
         if eval "$CHECK" > /dev/null 2>&1; then
             log "OK: $NAME restarted"
             tg_send "🔄 $NAME tự restart thành công"
@@ -672,34 +749,63 @@ check_restart() {
 
 log "=== Auto Recovery started ==="
 RAM_LIMIT=6500
-RAM_CRITICAL=7200
+RAM_CRITICAL=7500
+
+PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
+PG_DATA="/var/lib/postgresql/${PG_VER}/main"
 
 while true; do
     RAM_USED=$(free -m | awk 'NR==2{print $3}')
 
-    if [ "$RAM_USED" -gt "$RAM_CRITICAL" ]; then
+    if [ "${RAM_USED:-0}" -gt "$RAM_CRITICAL" ]; then
         log "CRITICAL RAM: ${RAM_USED}MB"
         tg_send "🚨 RAM CRITICAL: ${RAM_USED}MB - đang dọn!"
         redis-cli flushall 2>/dev/null || true
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
         sleep 10
-    elif [ "$RAM_USED" -gt "$RAM_LIMIT" ]; then
-        log "HIGH RAM: ${RAM_USED}MB"
+    elif [ "${RAM_USED:-0}" -gt "$RAM_LIMIT" ]; then
+        log "HIGH RAM: ${RAM_USED}MB - flush Redis cache"
         redis-cli flushall 2>/dev/null || true
     fi
 
-    check_restart "Nginx"      "pgrep -x nginx"    "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
-    check_restart "PHP-FPM"    "pgrep -f php-fpm"  "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
-    check_restart "MariaDB"    "pgrep -f mysqld"   "mysqld --user=mysql > /var/log/mysql/error.log 2>&1 &"
-    check_restart "Redis"      "pgrep -f redis"    "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
-    check_restart "PostgreSQL" "pgrep -f postgres" "PG_VER=\$(ls /etc/postgresql/ 2>/dev/null | head -1); [ -n \"\$PG_VER\" ] && su - postgres -c \"pg_ctlcluster \$PG_VER main start\" &"
-    check_restart "ChromaDB"   "pgrep -f chroma"   "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
-    check_restart "Cloudflare" "pgrep -f cloudflared" "cloudflared tunnel run \$TUNNEL_NAME > /root/logs/cloudflared.log 2>&1 &"
+    check_restart "Nginx" \
+        "pgrep -x nginx" \
+        "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
+
+    check_restart "PHP-FPM" \
+        "pgrep -f php-fpm" \
+        "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
+
+    check_restart "MariaDB" \
+        "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null" \
+        "mysqld --user=mysql --socket=/var/run/mysqld/mysqld.sock \
+            --pid-file=/var/run/mysqld/mysqld.pid \
+            > /var/log/mysql/error.log 2>&1 &"
+
+    check_restart "Redis" \
+        "redis-cli ping 2>/dev/null | grep -q PONG" \
+        "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
+
+    # PostgreSQL: dùng pg_ctl trực tiếp
+    if [ -n "$PG_VER" ]; then
+        check_restart "PostgreSQL" \
+            "su - postgres -c 'pg_ctl status -D $PG_DATA' 2>/dev/null | grep -q 'server is running'" \
+            "su - postgres -c 'pg_ctl start -D $PG_DATA -l /var/log/postgresql/postgresql.log -w -t 30' &"
+    fi
+
+    check_restart "ChromaDB" \
+        "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null" \
+        "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
+
+    check_restart "Cloudflare" \
+        "pgrep -f cloudflared" \
+        "cloudflared tunnel --config /root/.cloudflared/config.yml run \$TUNNEL_NAME \
+            > /root/logs/cloudflared.log 2>&1 &"
 
     # Log rotation > 10MB
     for F in /root/logs/*.log; do
-        [ -f "$F" ] && [ $(stat -c%s "$F" 2>/dev/null || echo 0) -gt 10485760 ] && \
-            mv $F ${F}.old && log "Rotated: $F"
+        [ -f "$F" ] && [ "$(stat -c%s "$F" 2>/dev/null || echo 0)" -gt 10485760 ] && \
+            mv "$F" "${F}.old" && log "Rotated: $F"
     done
 
     sleep 45
@@ -709,7 +815,7 @@ SCRIPT
     # ── backup.sh ─────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/backup.sh" << 'SCRIPT'
 #!/bin/bash
-source ~/.vps_config 2>/dev/null || true
+source /root/.vps_config 2>/dev/null || true
 BACKUP_DIR=/root/backup
 DATE=$(date +%Y%m%d_%H%M%S)
 LOG=/root/logs/backup.log
@@ -725,7 +831,7 @@ tg_upload() {
     local FILE=$1 CAPTION=$2
     [[ "$TG_ENABLED" == "true" ]] || return
     local SIZE=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
-    if [ $SIZE -lt 52428800 ]; then
+    if [ "$SIZE" -lt 52428800 ]; then
         curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendDocument" \
             -F chat_id="$TG_CHAT_ID" \
             -F document=@"$FILE" \
@@ -747,22 +853,21 @@ for SITE_DIR in /var/www/*/; do
 
     log "Backup: $SITE_NAME"
     FILES_BAK=$BACKUP_DIR/${SITE_NAME}_files_${DATE}.tar.gz
-    tar -czf $FILES_BAK -C /var/www $SITE_NAME 2>/dev/null
+    tar -czf "$FILES_BAK" -C /var/www "$SITE_NAME" 2>/dev/null
     tg_upload "$FILES_BAK" "📁 $SITE_NAME files"
 
     WP_CONFIG="$SITE_DIR/wp-config.php"
     if [ -f "$WP_CONFIG" ]; then
-        DB_NAME=$(grep "DB_NAME" $WP_CONFIG | grep -oP "'\K[^']+(?=')" | tail -1)
+        DB_NAME=$(grep "DB_NAME" "$WP_CONFIG" | grep -oP "'\K[^']+(?=')" | tail -1)
         if [ -n "$DB_NAME" ]; then
             DB_BAK=$BACKUP_DIR/${SITE_NAME}_db_${DATE}.sql.gz
-            mariadb-dump --user=root --skip-password "$DB_NAME" 2>/dev/null | gzip > $DB_BAK
+            mariadb-dump --defaults-file=/root/.my.cnf "$DB_NAME" 2>/dev/null | gzip > "$DB_BAK"
             tg_upload "$DB_BAK" "🗄️ $SITE_NAME DB ($DB_NAME)"
         fi
     fi
     COUNT=$((COUNT + 1))
 done
 
-# Dọn backup cũ > 7 ngày
 find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete 2>/dev/null
 find $BACKUP_DIR -name "*.sql.gz" -mtime +7 -delete 2>/dev/null
 
@@ -771,15 +876,20 @@ tg_send "✅ Backup xong! $COUNT sites. $(date '+%H:%M %d/%m/%Y')"
 SCRIPT
 
     # ── create-site.sh ────────────────────────────────────────
+    # FIX QUAN TRỌNG:
+    # 1. Tất cả hàm dùng `return` thay vì `exit` → không văng ra menu
+    # 2. MariaDB dùng --defaults-file=/root/.my.cnf (vps_admin user)
+    # 3. WP-CLI check DB trước khi install plugin → dùng subshell tránh lỗi
     cat > "$DEBIAN_ROOT/root/scripts/create-site.sh" << 'SCRIPT'
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
-source ~/.vps_config 2>/dev/null || true
+source /root/.vps_config 2>/dev/null || true
 
-GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; NC='\033[0m'
-log()  { echo -e "${GREEN}[✓]${NC} $1"; }
-ask()  { echo -e "${CYAN}[?]${NC} $1"; }
-warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
+log()   { echo -e "${GREEN}[✓]${NC} $1"; }
+ask()   { echo -e "${CYAN}[?]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+err()   { echo -e "${RED}[✗]${NC} $1"; }
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -793,75 +903,81 @@ echo ""
 read -p "Chọn (1-3): " SITE_TYPE
 
 echo ""
-ask "Domain đầy đủ (vd: thoigianranh.com hoặc api.thoigianranh.com):"
-read DOMAIN
+ask "Domain đầy đủ (vd: example.com hoặc api.example.com):"
+read -r DOMAIN
 
-# Subdomain detection
+if [ -z "$DOMAIN" ]; then
+    err "Domain không được để trống!"
+    exit 0
+fi
+
 DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
-IS_SUBDOMAIN=False
-[ "$DOT_COUNT" -ge 2 ] && IS_SUBDOMAIN=True
+IS_SUBDOMAIN=false
+[ "$DOT_COUNT" -ge 2 ] && IS_SUBDOMAIN=true
 
-SITE_NAME=$(echo $DOMAIN | sed 's/\./-/g')
+SITE_NAME=$(echo "$DOMAIN" | sed 's/\./-/g')
 
-# Hàm thêm vào Cloudflare Tunnel
+# ── Hàm cập nhật Cloudflare Tunnel config ─────────────────
 add_to_tunnel() {
     local SERVICE_URL=$1
     log "Cập nhật Cloudflare Tunnel..."
+
     python3 << PYTHON
-import yaml, os
+import yaml, os, sys
 
 config_path = os.path.expanduser('~/.cloudflared/config.yml')
 try:
     with open(config_path) as f:
         config = yaml.safe_load(f)
-
-    new_rules = [{'hostname': '$DOMAIN', 'service': '$SERVICE_URL'}]
-
-    # Thêm www chỉ cho root domain (không phải subdomain)
-    if not $IS_SUBDOMAIN:
-        new_rules.append({'hostname': 'www.$DOMAIN', 'service': '$SERVICE_URL'})
-
-    existing = [r for r in config['ingress'] if 'hostname' in r]
-    catch_all = [r for r in config['ingress'] if 'hostname' not in r]
-    existing_domains = [r['hostname'] for r in existing]
-
-    for rule in new_rules:
-        if rule['hostname'] not in existing_domains:
-            existing.append(rule)
-
-    config['ingress'] = existing + catch_all
-    with open(config_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
-    print("  Tunnel config OK!")
 except Exception as e:
-    print(f"  Lỗi: {e}")
+    print(f"  Không đọc được config: {e}")
+    sys.exit(0)
+
+new_rules = [{'hostname': '${DOMAIN}', 'service': '${SERVICE_URL}'}]
+
+if not ${IS_SUBDOMAIN}:
+    new_rules.append({'hostname': 'www.${DOMAIN}', 'service': '${SERVICE_URL}'})
+
+existing = [r for r in config.get('ingress', []) if 'hostname' in r]
+catch_all = [r for r in config.get('ingress', []) if 'hostname' not in r]
+existing_domains = [r['hostname'] for r in existing]
+
+for rule in new_rules:
+    if rule['hostname'] not in existing_domains:
+        existing.append(rule)
+
+config['ingress'] = existing + catch_all
+with open(config_path, 'w') as f:
+    yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+print("  Tunnel config cập nhật OK!")
 PYTHON
 
-    cloudflared tunnel route dns $TUNNEL_NAME $DOMAIN 2>/dev/null && \
+    cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null && \
         log "DNS $DOMAIN → OK" || \
-        warn "Xóa record DNS cũ trên Cloudflare Dashboard trước!"
+        warn "Xóa record DNS cũ trên Cloudflare Dashboard nếu bị lỗi!"
 
     if [ "$IS_SUBDOMAIN" = "false" ]; then
-        cloudflared tunnel route dns $TUNNEL_NAME www.$DOMAIN 2>/dev/null || true
+        cloudflared tunnel route dns "$TUNNEL_NAME" "www.$DOMAIN" 2>/dev/null || true
     fi
 
     pkill -HUP cloudflared 2>/dev/null || true
 }
 
-# Nginx template WordPress (bảo mật đầy đủ)
+# ── Nginx config cho WordPress ─────────────────────────────
 create_nginx_wordpress() {
-    cat > /etc/nginx/sites-available/${SITE_NAME}.conf << NGINX
+    local EXTRA_SERVER_NAME=""
+    [ "$IS_SUBDOMAIN" = "false" ] && EXTRA_SERVER_NAME=" www.$DOMAIN"
+
+    cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
 server {
     listen 8080;
-    server_name $DOMAIN$([ "$IS_SUBDOMAIN" = "false" ] && echo " www.$DOMAIN");
-    root /var/www/$SITE_NAME;
+    server_name ${DOMAIN}${EXTRA_SERVER_NAME};
+    root /var/www/${SITE_NAME};
     index index.php;
 
-    # Cloudflare real IP
     set_real_ip_from 0.0.0.0/0;
     real_ip_header X-Forwarded-For;
 
-    # Rate limiting wp-login (chống brute force)
     location = /wp-login.php {
         limit_req zone=wp_login burst=3 nodelay;
         include snippets/fastcgi-php.conf;
@@ -870,22 +986,14 @@ server {
         fastcgi_param HTTPS on;
     }
 
-    # Block xmlrpc.php hoàn toàn
-    location = /xmlrpc.php {
-        deny all;
-        return 444;
-    }
-
-    # Block truy cập file nhạy cảm
+    location = /xmlrpc.php { deny all; return 444; }
     location ~* /\.(ht|git|env) { deny all; return 444; }
     location ~* wp-config.php { deny all; return 444; }
 
-    # WordPress permalink
     location / {
         try_files \$uri \$uri/ /index.php?\$args;
     }
 
-    # PHP-FPM
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
@@ -894,55 +1002,65 @@ server {
         fastcgi_read_timeout 300;
     }
 
-    # Cache static files 30 ngày
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|woff2|svg|webp)$ {
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|woff2|svg|webp)\$ {
         expires 30d;
         add_header Cache-Control "public, no-transform";
         access_log off;
     }
 
-    # Upload size
     client_max_body_size 64M;
 }
 NGINX
 }
 
+# ── Tạo WordPress ──────────────────────────────────────────
 create_wordpress() {
     echo ""
-    ask "Tên database:"
-    read DB_NAME
-    ask "Username database:"
-    read DB_USER
+    ask "Tên database (vd: myblog_db):"
+    read -r DB_NAME
+    ask "Username database (vd: myblog_user):"
+    read -r DB_USER
     ask "Password database:"
-    read -s DB_PASS
+    read -rs DB_PASS
     echo ""
+
+    if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
+        err "Database info không được để trống!"
+        return 1
+    fi
 
     echo ""
     echo "  Type    : WordPress + Redis Cache"
     echo "  Domain  : https://$DOMAIN"
     echo "  Thư mục : /var/www/$SITE_NAME"
-    echo "  Database: $DB_NAME"
+    echo "  Database: $DB_NAME / $DB_USER"
     read -p "Xác nhận? (y/n): " OK
-    [[ "$OK" != "y" ]] && exit 0
+    [ "$OK" != "y" ] && return 0
 
+    # ── Tạo database (FIX: dùng .my.cnf → vps_admin có quyền đầy đủ) ──
     log "Tạo database..."
-    # Sử dụng .my.cnf đã cấu hình sẵn
-    mariadb << SQL
+    if mariadb --defaults-file=/root/.my.cnf << SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
+    then
+        log "Database tạo thành công!"
+    else
+        err "Lỗi tạo database! Kiểm tra MariaDB đang chạy: pgrep mysqld"
+        return 1
+    fi
 
     log "Tải WordPress..."
     mkdir -p /var/www/$SITE_NAME
-    cd /tmp
+    cd /tmp || return 1
     wget -q https://wordpress.org/latest.tar.gz -O wp.tar.gz
     tar -xzf wp.tar.gz
-    cp -r wordpress/* /var/www/$SITE_NAME/
+    cp -r wordpress/. /var/www/$SITE_NAME/
     chown -R www-data:www-data /var/www/$SITE_NAME
     chmod -R 755 /var/www/$SITE_NAME
-    rm -f wp.tar.gz
+    rm -rf /tmp/wordpress /tmp/wp.tar.gz
 
     log "Cấu hình wp-config.php..."
     cp /var/www/$SITE_NAME/wp-config-sample.php /var/www/$SITE_NAME/wp-config.php
@@ -950,7 +1068,6 @@ SQL
     sed -i "s/username_here/$DB_USER/"        /var/www/$SITE_NAME/wp-config.php
     sed -i "s/password_here/$DB_PASS/"        /var/www/$SITE_NAME/wp-config.php
 
-    # Thêm config bảo mật + Redis + HTTPS fix
     cat >> /var/www/$SITE_NAME/wp-config.php << WPEOF
 
 /* Redis Cache */
@@ -976,28 +1093,47 @@ define('WP_HOME', 'https://${DOMAIN}');
 define('WP_SITEURL', 'https://${DOMAIN}');
 WPEOF
 
-    log "Tạo Nginx vhost với bảo mật..."
+    log "Tạo Nginx vhost..."
     create_nginx_wordpress
     ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
-    nginx -t && nginx -s reload 2>/dev/null || true
-    PHP_FPM=$(ls /usr/sbin/php-fpm* 2>/dev/null | tail -1); [ -n "$PHP_FPM" ] && $PHP_FPM 2>/dev/null || true
+    nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || warn "Nginx reload lỗi, kiểm tra lại"
 
     add_to_tunnel "http://localhost:8080"
 
-    # Cài plugins qua WP-CLI
+    # ── Cài plugins qua WP-CLI ─────────────────────────────
+    # FIX: chạy trong subshell, dùng --skip-check nếu WP chưa install
+    # Không để lỗi WP-CLI làm văng script ra ngoài
     log "Cài plugins WordPress..."
-    cd /var/www/$SITE_NAME
-    
-    # Check if wp-cli can connect to DB
-    if ! wp core is-installed --allow-root &>/dev/null; then
-        warn "Không thể kết nối DB, kiểm tra lại thông tin database!"
-        # Vẫn tiếp tục để không crash menu
+    cd /var/www/$SITE_NAME || true
+
+    # Chờ MariaDB sẵn sàng
+    local RETRY=0
+    while [ $RETRY -lt 5 ]; do
+        if wp db check --allow-root --quiet 2>/dev/null; then
+            break
+        fi
+        RETRY=$((RETRY + 1))
+        warn "DB chưa sẵn sàng, thử lại lần $RETRY/5..."
+        sleep 3
+    done
+
+    if wp db check --allow-root --quiet 2>/dev/null; then
+        # Cài redis-cache
+        if wp plugin install redis-cache --activate --allow-root 2>/dev/null; then
+            wp redis enable --allow-root 2>/dev/null || true
+            log "Plugin redis-cache đã cài!"
+        else
+            warn "Không cài được redis-cache (bỏ qua)"
+        fi
+
+        # Cài cloudflare-flexible-ssl
+        if wp plugin install cloudflare-flexible-ssl --activate --allow-root 2>/dev/null; then
+            log "Plugin cloudflare-flexible-ssl đã cài!"
+        else
+            warn "Không cài được cloudflare-flexible-ssl (bỏ qua)"
+        fi
     else
-        # Redis Object Cache
-        wp plugin install redis-cache --activate --allow-root 2>/dev/null || true
-        wp redis enable --allow-root 2>/dev/null || true
-        # Cloudflare Flexible SSL
-        wp plugin install cloudflare-flexible-ssl --activate --allow-root 2>/dev/null || true
+        warn "WP chưa được install (chưa chạy wp core install). Cài plugin sau qua: vps wp $DOMAIN plugin install redis-cache --activate"
     fi
 
     echo ""
@@ -1006,29 +1142,26 @@ WPEOF
     echo "  URL     : https://$DOMAIN"
     echo "  Admin   : https://$DOMAIN/wp-admin"
     echo "  Thư mục : /var/www/$SITE_NAME"
-    echo "  DB      : $DB_NAME"
-    echo ""
-    echo "  Plugins đã cài:"
-    echo "    ✓ Redis Object Cache"
-    echo "    ✓ Cloudflare Flexible SSL"
+    echo "  DB      : $DB_NAME | User: $DB_USER"
     echo ""
     echo "  WP-CLI  : vps wp $DOMAIN <command>"
     echo ""
 }
 
+# ── Tạo NextJS ────────────────────────────────────────────
 create_nextjs() {
     echo ""
     ask "Port NextJS đang chạy [3000]:"
-    read NJS_PORT
+    read -r NJS_PORT
     NJS_PORT=${NJS_PORT:-3000}
 
     echo ""
     echo "  Domain : https://$DOMAIN"
     echo "  Proxy  : 127.0.0.1:$NJS_PORT"
     read -p "Xác nhận? (y/n): " OK
-    [[ "$OK" != "y" ]] && exit 0
+    [ "$OK" != "y" ] && return 0
 
-    cat > /etc/nginx/sites-available/${SITE_NAME}.conf << NGINX
+    cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
 server {
     listen 8080;
     server_name $DOMAIN;
@@ -1049,7 +1182,7 @@ server {
 NGINX
 
     ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
-    nginx -t && nginx -s reload 2>/dev/null || true
+    nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || warn "Nginx reload lỗi"
 
     add_to_tunnel "http://localhost:8080"
 
@@ -1060,29 +1193,31 @@ NGINX
     echo ""
 }
 
+# ── Tạo Static HTML ───────────────────────────────────────
 create_static() {
     mkdir -p /var/www/$SITE_NAME
     cat > /var/www/$SITE_NAME/index.html << HTML
 <!DOCTYPE html>
-<html><head><title>$DOMAIN</title></head>
-<body><h1>$DOMAIN đang hoạt động!</h1></body></html>
+<html lang="vi">
+<head><meta charset="UTF-8"><title>$DOMAIN</title></head>
+<body><h1>$DOMAIN đang hoạt động!</h1></body>
+</html>
 HTML
     chown -R www-data:www-data /var/www/$SITE_NAME
 
-    cat > /etc/nginx/sites-available/${SITE_NAME}.conf << NGINX
+    cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
 server {
     listen 8080;
     server_name $DOMAIN;
     root /var/www/$SITE_NAME;
     index index.html;
-
     location / { try_files \$uri \$uri/ =404; }
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ { expires 30d; }
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js)\$ { expires 30d; }
 }
 NGINX
 
     ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
-    nginx -t && nginx -s reload 2>/dev/null || true
+    nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || warn "Nginx reload lỗi"
 
     add_to_tunnel "http://localhost:8080"
 
@@ -1093,42 +1228,34 @@ NGINX
     echo ""
 }
 
+# ── Dispatch ──────────────────────────────────────────────
 case "$SITE_TYPE" in
     1) create_wordpress ;;
     2) create_nextjs ;;
     3) create_static ;;
-    *) echo "Lựa chọn không hợp lệ"; exit 1 ;;
+    *) err "Lựa chọn không hợp lệ"; exit 0 ;;
 esac
 SCRIPT
 
-    # ── wp.sh - WP-CLI helper ─────────────────────────────────
+    # ── wp.sh ─────────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/wp.sh" << 'SCRIPT'
 #!/bin/bash
-# WP-CLI helper - chạy lệnh WP-CLI trên site chỉ định
-# Dùng: wp.sh <domain> <wp-cli command>
-# Ví dụ: wp.sh thoigianranh.com plugin list
-
-DOMAIN=$1
-shift
-CMD="$@"
+DOMAIN=$1; shift; CMD="$*"
 
 if [ -z "$DOMAIN" ]; then
     echo ""
     echo "Cách dùng: vps wp <domain> <lệnh>"
     echo ""
     echo "Ví dụ:"
-    echo "  vps wp thoigianranh.com plugin list"
-    echo "  vps wp thoigianranh.com plugin update --all"
-    echo "  vps wp thoigianranh.com theme list"
-    echo "  vps wp thoigianranh.com core update"
-    echo "  vps wp thoigianranh.com user list"
-    echo "  vps wp thoigianranh.com cache flush"
-    echo "  vps wp thoigianranh.com db export backup.sql"
+    echo "  vps wp example.com plugin list"
+    echo "  vps wp example.com plugin update --all"
+    echo "  vps wp example.com cache flush"
+    echo "  vps wp example.com db export backup.sql"
     echo ""
     exit 0
 fi
 
-SITE_NAME=$(echo $DOMAIN | sed 's/\./-/g')
+SITE_NAME=$(echo "$DOMAIN" | sed 's/\./-/g')
 SITE_DIR="/var/www/$SITE_NAME"
 
 if [ ! -d "$SITE_DIR" ]; then
@@ -1136,35 +1263,33 @@ if [ ! -d "$SITE_DIR" ]; then
     exit 1
 fi
 
-cd $SITE_DIR
-wp $CMD --allow-root --path=$SITE_DIR
+cd "$SITE_DIR"
+wp $CMD --allow-root --path="$SITE_DIR"
 SCRIPT
 
-    # ── db.sh - Database helper ───────────────────────────────
+    # ── db.sh ─────────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/db.sh" << 'SCRIPT'
 #!/bin/bash
-# Database helper
-CMD=$1
-shift
+CMD=$1; shift
 
 case "$CMD" in
     shell)
-        echo "Vào MariaDB shell..."
-        mariadb --user=root --skip-password
+        echo "Vào MariaDB shell (vps_admin)..."
+        mariadb --defaults-file=/root/.my.cnf
         ;;
     list)
         echo ""
         echo "DATABASES:"
-        mariadb --user=root --skip-password -e "SHOW DATABASES;" 2>/dev/null | \
+        mariadb --defaults-file=/root/.my.cnf -e "SHOW DATABASES;" 2>/dev/null | \
             grep -v "^Database\|information_schema\|performance_schema\|mysql\|sys"
         echo ""
         ;;
     create)
         DB=$1 USER=$2 PASS=$3
-        [ -z "$DB" ] && read -p "Tên database: " DB
+        [ -z "$DB" ]   && read -p "Tên database: " DB
         [ -z "$USER" ] && read -p "Username: " USER
         [ -z "$PASS" ] && { read -sp "Password: " PASS; echo; }
-        mariadb --user=root --skip-password << SQL
+        mariadb --defaults-file=/root/.my.cnf << SQL
 CREATE DATABASE IF NOT EXISTS \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$USER'@'localhost' IDENTIFIED BY '$PASS';
 GRANT ALL PRIVILEGES ON \`$DB\`.* TO '$USER'@'localhost';
@@ -1176,22 +1301,24 @@ SQL
         DB=$1
         [ -z "$DB" ] && read -p "Tên database cần xóa: " DB
         read -p "Xóa database '$DB'? (y/n): " OK
-        [[ "$OK" != "y" ]] && exit 0
-        mariadb --user=root --skip-password -e "DROP DATABASE IF EXISTS \`$DB\`;"
+        [ "$OK" != "y" ] && exit 0
+        mariadb --defaults-file=/root/.my.cnf -e "DROP DATABASE IF EXISTS \`$DB\`;"
         echo "Đã xóa $DB"
         ;;
     export)
-        DB=$1 FILE=${2:-~/backup/${1}_$(date +%Y%m%d).sql.gz}
-        mariadb-dump --user=root --skip-password "$DB" 2>/dev/null | gzip > $FILE
-        echo "Export: $FILE ($(du -sh $FILE | cut -f1))"
+        DB=$1
+        FILE=${2:-/root/backup/${DB}_$(date +%Y%m%d).sql.gz}
+        mkdir -p "$(dirname $FILE)"
+        mariadb-dump --defaults-file=/root/.my.cnf "$DB" 2>/dev/null | gzip > "$FILE"
+        echo "Export: $FILE ($(du -sh "$FILE" | cut -f1))"
         ;;
     import)
         DB=$1 FILE=$2
         [ ! -f "$FILE" ] && echo "File không tồn tại: $FILE" && exit 1
         if [[ "$FILE" == *.gz ]]; then
-            gunzip -c "$FILE" | mariadb --user=root --skip-password "$DB"
+            gunzip -c "$FILE" | mariadb --defaults-file=/root/.my.cnf "$DB"
         else
-            mariadb --user=root --skip-password "$DB" < "$FILE"
+            mariadb --defaults-file=/root/.my.cnf "$DB" < "$FILE"
         fi
         echo "Import xong!"
         ;;
@@ -1210,9 +1337,51 @@ SQL
 esac
 SCRIPT
 
-    run_debian "chmod +x ~/scripts/*.sh"
-    # Cấp quyền thực thi
-    run_debian "chmod -R +x ~/scripts/"
+    # ── pg.sh - PostgreSQL helper ──────────────────────────────
+    cat > "$DEBIAN_ROOT/root/scripts/pg.sh" << 'SCRIPT'
+#!/bin/bash
+# PostgreSQL helper - tương tự db.sh nhưng cho PostgreSQL
+CMD=$1; shift
+
+PG_CMD() { su - postgres -c "psql -c \"$1\"" 2>/dev/null; }
+
+case "$CMD" in
+    shell)
+        echo "Vào PostgreSQL shell..."
+        su - postgres -c "psql"
+        ;;
+    list)
+        echo ""; echo "DATABASES:"
+        su - postgres -c "psql -c '\l'" 2>/dev/null
+        echo ""
+        ;;
+    create)
+        DB=$1 USER=$2 PASS=$3
+        [ -z "$DB" ]   && read -p "Tên database: " DB
+        [ -z "$USER" ] && read -p "Username: " USER
+        [ -z "$PASS" ] && { read -sp "Password: " PASS; echo; }
+        su - postgres -c "psql << SQL
+CREATE DATABASE \"$DB\";
+CREATE USER \"$USER\" WITH ENCRYPTED PASSWORD '$PASS';
+GRANT ALL PRIVILEGES ON DATABASE \"$DB\" TO \"$USER\";
+SQL" 2>/dev/null
+        echo "PostgreSQL database '$DB' tạo xong!"
+        ;;
+    drop)
+        DB=$1
+        [ -z "$DB" ] && read -p "Tên database: " DB
+        read -p "Xóa '$DB'? (y/n): " OK; [ "$OK" != "y" ] && exit 0
+        su - postgres -c "psql -c 'DROP DATABASE IF EXISTS \"$DB\";'" 2>/dev/null
+        echo "Đã xóa $DB"
+        ;;
+    *)
+        echo "Cách dùng: vps pg <shell|list|create|drop>"
+        ;;
+esac
+SCRIPT
+
+    run_debian "chmod +x /root/scripts/*.sh"
+
     log "Tất cả scripts tạo xong!"
 }
 
@@ -1243,55 +1412,55 @@ step9_vps_command() {
 
     cat > "$PREFIX/bin/vps" << 'VPS'
 #!/data/data/com.termux/files/usr/bin/bash
+CYAN='\033[0;36m'; NC='\033[0m'
 CMD=$1; shift
 
 run() { proot-distro login debian --shared-tmp -- bash -c "$1"; }
 
 case "$CMD" in
     start|restart)
-        echo "Đang khởi động Server sạnh sẽ (Restart)..."
+        echo "Khởi động Server..."
         tmux kill-session -t vps 2>/dev/null || true
-        run "bash ~/scripts/stop.sh"
+        run "bash /root/scripts/stop.sh"
         sleep 2
         tmux new-session -d -s vps 2>/dev/null || true
         tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
-        echo "Lệnh khởi động đã được gửi vào Tmux."
-        echo "Đang đợi dịch vụ lên xanh (10s)..."
-        sleep 10
-        run "bash ~/scripts/status.sh"
+        echo "Đang đợi services khởi động (15s)..."
+        sleep 15
+        run "bash /root/scripts/status.sh"
         ;;
-    stop)    run "bash ~/scripts/stop.sh" ;;
-    status)   run "bash ~/scripts/status.sh" ;;
-    monitor)  proot-distro login debian --shared-tmp -- bash ~/scripts/monitor.sh ;;
-    create)   run "bash ~/scripts/create-site.sh" ;;
-    backup)   run "bash ~/scripts/backup.sh" ;;
-    attach)   tmux attach -t vps ;;
-    debian)   proot-distro login debian --shared-tmp ;;
+    stop)    run "bash /root/scripts/stop.sh" ;;
+    status)  run "bash /root/scripts/status.sh" ;;
+    monitor) proot-distro login debian --shared-tmp -- bash /root/scripts/monitor.sh ;;
+    create)  run "bash /root/scripts/create-site.sh" ;;
+    backup)  run "bash /root/scripts/backup.sh" ;;
+    attach)  tmux attach -t vps ;;
+    debian)  proot-distro login debian --shared-tmp ;;
     wp)
         DOMAIN=$1; shift
-        run "bash ~/scripts/wp.sh $DOMAIN $*"
+        run "bash /root/scripts/wp.sh $DOMAIN $*"
         ;;
     db)
-        run "bash ~/scripts/db.sh $*"
+        run "bash /root/scripts/db.sh $*"
+        ;;
+    pg)
+        run "bash /root/scripts/pg.sh $*"
         ;;
     debug)
         echo "==== STARTUP LOG ===="
         proot-distro login debian --shared-tmp -- cat /root/logs/startup.log 2>/dev/null || echo 'Không có log.'
-        echo "==== PROCESS LIST (ps aux) ===="
-        proot-distro login debian --shared-tmp -- ps aux
-        echo "==== NGINX ERROR LOG ===="
-        proot-distro login debian --shared-tmp -- tail -n 20 /var/log/nginx/error.log 2>/dev/null
-        echo "==== PHP-FPM LOG ===="
-        proot-distro login debian --shared-tmp -- tail -n 20 /root/logs/php-fpm.log 2>/dev/null
-        echo "==== MARIADB ERROR LOG ===="
-        proot-distro login debian --shared-tmp -- tail -n 20 /var/log/mysql/error.log 2>/dev/null
-        echo "==== CHROMADB LOG ===="
-        proot-distro login debian --shared-tmp -- tail -n 20 /root/logs/chromadb.log 2>/dev/null
         echo "==== CLOUDFLARE LOG ===="
-        proot-distro login debian --shared-tmp -- tail -n 20 /root/logs/cloudflared.log 2>/dev/null
-        echo ""
-        echo "==== LOGS DIRECTORY ===="
-        proot-distro login debian --shared-tmp -- ls -la /root/logs/
+        proot-distro login debian --shared-tmp -- tail -20 /root/logs/cloudflared.log 2>/dev/null
+        echo "==== NGINX ERROR ===="
+        proot-distro login debian --shared-tmp -- tail -20 /var/log/nginx/error.log 2>/dev/null
+        echo "==== MARIADB ERROR ===="
+        proot-distro login debian --shared-tmp -- tail -20 /var/log/mysql/error.log 2>/dev/null
+        echo "==== POSTGRESQL LOG ===="
+        proot-distro login debian --shared-tmp -- tail -20 /var/log/postgresql/postgresql.log 2>/dev/null
+        echo "==== CHROMADB LOG ===="
+        proot-distro login debian --shared-tmp -- tail -20 /root/logs/chromadb.log 2>/dev/null
+        echo "==== AUTO RECOVER LOG ===="
+        proot-distro login debian --shared-tmp -- tail -20 /root/logs/auto_recover.log 2>/dev/null
         ;;
     list)
         echo ""
@@ -1305,77 +1474,75 @@ case "$CMD" in
     delete)
         DOMAIN=$1
         if [ -z "$DOMAIN" ]; then
-            run "ls /etc/nginx/sites-enabled/" | sed 's/\.conf//g'
+            echo "Sites hiện có:"
+            run "ls /etc/nginx/sites-enabled/ 2>/dev/null | sed 's/\.conf//g; s/-/./g'"
             read -p "Nhập Domain cần xóa: " DOMAIN
         fi
-        SITE_NAME=$(echo $DOMAIN | sed 's/\./-/g')
-        echo "Tiến hành xóa Website: $DOMAIN"
-        read -p "Bạn có chắc chắn muốn xóa toàn bộ Nginx config và Source code? (y/n): " OK
-        [[ "$OK" != "y" ]] && exit 0
-        
+        SITE_NAME=$(echo "$DOMAIN" | sed 's/\./-/g')
+        echo "Xóa Website: $DOMAIN"
+        read -p "Chắc chắn? (y/n): " OK
+        [ "$OK" != "y" ] && exit 0
+
         run "
-            # Xóa Nginx config
             rm -f /etc/nginx/sites-enabled/${SITE_NAME}.conf
             rm -f /etc/nginx/sites-available/${SITE_NAME}.conf
             nginx -s reload 2>/dev/null || true
-            
-            # Xóa Webroot
             rm -rf /var/www/${SITE_NAME}
-            
-            # Xóa khỏi Cloudflare Config
             python3 << PYTHON
 import yaml, os
 config_path = os.path.expanduser('~/.cloudflared/config.yml')
 if os.path.exists(config_path):
-    with open(config_path) as f: config = yaml.safe_load(f)
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
     if config and 'ingress' in config:
-        config['ingress'] = [r for r in config['ingress'] if r.get('hostname') not in ['$DOMAIN', 'www.$DOMAIN']]
-        with open(config_path, 'w') as f: yaml.dump(config, f, default_flow_style=False)
+        config['ingress'] = [r for r in config['ingress']
+                             if r.get('hostname') not in ['$DOMAIN', 'www.$DOMAIN']]
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
 PYTHON
             pkill -HUP cloudflared 2>/dev/null || true
-            echo 'Đã xóa Website, Nginx config và dọn dẹp Cloudflare tunnel.'
-            echo 'Lưu ý: Bạn nên vào dashboard cloudflare để xóa DNS record thủ công.'
+            echo 'Đã xóa website và dọn tunnel config.'
+            echo 'Vào Cloudflare Dashboard để xóa DNS record thủ công.'
         "
         ;;
     logs)
         SERVICE=${1:-cloudflared}
         run "tail -f /root/logs/${SERVICE}.log"
         ;;
+    ""|menu)
+        while true; do
+            clear
+            echo "  ╔═══════════════════════════════════════════════════╗"
+            echo "  ║         ANDROID VPS CONTROL PANEL v4.0           ║"
+            echo "  ╚═══════════════════════════════════════════════════╝"
+            echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
+            echo "  1. Khởi động Server        6. Danh sách Websites"
+            echo "  2. Dừng Server             7. Xóa Website"
+            echo "  3. Xem Trạng thái          8. Backup Telegram"
+            echo "  4. Monitor Real-time       9. Xem Log (Debug)"
+            echo "  5. Tạo Website mới        10. Mở Tmux (Attach)"
+            echo "                             0. Thoát"
+            echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
+            echo ""
+            read -p "Chọn chức năng (0-10): " OPT
+            case $OPT in
+                1) vps start; sleep 2 ;;
+                2) vps stop; sleep 2 ;;
+                3) vps status; echo ""; read -p "Bấm Enter để về Menu..." ;;
+                4) vps monitor ;;
+                5) vps create; echo ""; read -p "Bấm Enter để về Menu..." ;;
+                6) vps list; echo ""; read -p "Bấm Enter để về Menu..." ;;
+                7) vps delete; echo ""; read -p "Bấm Enter để về Menu..." ;;
+                8) vps backup; sleep 2 ;;
+                9) vps debug; echo ""; read -p "Bấm Enter để về Menu..." ;;
+                10) vps attach ;;
+                0) exit 0 ;;
+                *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
+            esac
+        done
+        ;;
     *)
-        if [ -z "$CMD" ]; then
-            while true; do
-                clear
-                echo "  ╔═══════════════════════════════════════════════════╗"
-                echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
-                echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v7.0 ════════════════${NC}"
-                echo -e "  1. Khởi động Server        6. Danh sách Websites"
-                echo -e "  2. Dừng Server             7. Xóa Website"
-                echo -e "  3. Xem Trạng thái          8. Backup Telegram"
-                echo -e "  4. Monitor Real-time       9. Xem Log (Debug)"
-                echo -e "  5. Tạo Website mới        10. Mở Tmux (Attach)"
-                echo -e "                             0. Thoát"
-                echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
-                echo ""
-                read -p "Chọn chức năng (0-10): " OPT
-                case $OPT in
-                    1) vps start; sleep 2 ;;
-                    2) vps stop; sleep 2 ;;
-                    3) vps status; echo ""; read -p "Bấm Enter để về Menu..." ;;
-                    4) vps monitor ;;
-                    5) vps create ;;
-                    6) vps list; echo ""; read -p "Bấm Enter để về Menu..." ;;
-                    7) vps delete; echo ""; read -p "Bấm Enter để về Menu..." ;;
-                    8) vps backup; sleep 2 ;;
-                    9) vps debug; echo ""; read -p "Báo cáo log xong. Bấm Enter để về Menu..." ;;
-                    10) vps attach ;;
-                    0) exit 0 ;;
-                    *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
-                esac
-            done
-        else
-            echo "Lệnh không hợp lệ. Gõ 'vps' để mở Menu hoặc xem trợ giúp."
-        fi
+        echo "Lệnh không hợp lệ. Gõ 'vps' để mở Menu."
         ;;
 esac
 VPS
@@ -1391,16 +1558,15 @@ main() {
     clear
     banner
 
-    echo -e "${YELLOW}Cài đặt Android VPS Stack đầy đủ v3.0${NC}"
+    echo -e "${YELLOW}Cài đặt Android VPS Stack v4.0${NC}"
     echo ""
-    echo "  • Nginx + PHP-FPM (nhẹ hơn Apache)"
-    echo "  • MariaDB + Redis + WP-CLI"
-    echo "  • Node.js 20 + PostgreSQL + ChromaDB"
-    echo "  • Cloudflare Tunnel (SSL + IP động)"
-    echo "  • tmux + Auto Recovery + Health Check"
-    echo "  • Backup Telegram + Monitor real-time"
-    echo "  • Bảo mật: Rate limit, block xmlrpc"
-    echo "  • Multi-site + Subdomain tự động"
+    echo "  • Nginx + PHP-FPM 8.4 (nhẹ hơn Apache)"
+    echo "  • MariaDB (auth mới: vps_admin user)"
+    echo "  • Redis + WP-CLI + Node.js 20"
+    echo "  • PostgreSQL (pg_ctl trực tiếp, không cần systemd)"
+    echo "  • ChromaDB + Cloudflare Tunnel"
+    echo "  • Auto Recovery + Health Check + Backup Telegram"
+    echo "  • Fix: MariaDB auth, PostgreSQL proot, menu không văng"
     echo ""
     read -p "Bắt đầu cài đặt? (y/n): " CONFIRM
     [[ "$CONFIRM" != "y" ]] && echo "Hủy." && exit 0
@@ -1415,35 +1581,33 @@ main() {
     step8_boot
     step9_vps_command
 
-    section "✅ CÀI ĐẶT HOÀN TẤT - v3.0"
+    section "✅ CÀI ĐẶT HOÀN TẤT v4.0"
     echo ""
     echo -e "${GREEN}Lệnh quan trọng:${NC}"
     echo ""
-    echo -e "  ${CYAN}vps start${NC}                   Khởi động server"
-    echo -e "  ${CYAN}vps status${NC}                  Trạng thái"
-    echo -e "  ${CYAN}vps monitor${NC}                 Real-time monitor"
-    echo -e "  ${CYAN}vps create${NC}                  Tạo site mới"
-    echo -e "  ${CYAN}vps wp thoigianranh.com help${NC} WP-CLI commands"
-    echo -e "  ${CYAN}vps db shell${NC}                Vào MariaDB"
-    echo -e "  ${CYAN}vps debug${NC}                   Xem log lỗi chi tiết"
-    echo -e "  ${CYAN}vps backup${NC}                  Backup Telegram"
-    echo -e "  ${CYAN}vps attach${NC}                  Mở tmux"
+    echo -e "  ${CYAN}vps start${NC}                Khởi động server"
+    echo -e "  ${CYAN}vps status${NC}               Trạng thái services"
+    echo -e "  ${CYAN}vps monitor${NC}              Real-time monitor"
+    echo -e "  ${CYAN}vps create${NC}               Tạo WordPress / NextJS / Static"
+    echo -e "  ${CYAN}vps db shell${NC}             Vào MariaDB"
+    echo -e "  ${CYAN}vps pg shell${NC}             Vào PostgreSQL"
+    echo -e "  ${CYAN}vps wp example.com help${NC}  WP-CLI"
+    echo -e "  ${CYAN}vps debug${NC}                Xem log lỗi"
+    echo -e "  ${CYAN}vps backup${NC}               Backup Telegram"
+    echo ""
+    echo -e "${YELLOW}Thay đổi chính so với v3.0:${NC}"
+    echo "  ✓ MariaDB: dùng vps_admin user thay vì root (fix ERROR 1698)"
+    echo "  ✓ PostgreSQL: pg_ctl trực tiếp, không cần systemd"
+    echo "  ✓ create-site: dùng return thay exit → không văng menu"
+    echo "  ✓ WP plugins: retry logic, bắt lỗi đúng cách"
+    echo "  ✓ Thêm: vps pg (PostgreSQL helper)"
     echo ""
 
-    read -p "Khởi động server ngay? (y/n): " START_NOW
-    if [[ "$START_NOW" == "y" ]]; then
-        vps restart
-    fi
-
-    echo ""
-    log "Done! Dùng 'vps create' để tạo site đầu tiên."
-
-    # Hiển thị thông tin SSH kết nối
+    # Thông tin SSH
     PHONE_IP=$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || \
                ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -1)
     SSH_USER=$(whoami)
 
-    echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  THÔNG TIN KẾT NỐI SSH (Bitvise SSH Client)    ${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1453,10 +1617,17 @@ main() {
     echo -e "  Username : ${GREEN}${SSH_USER}${NC}"
     echo -e "  Password : ${GREEN}<password bạn vừa đặt lúc cài>${NC}"
     echo ""
-    echo -e "  ${YELLOW}Lưu ý: Máy tính và điện thoại phải cùng WiFi${NC}"
-    echo -e "  ${YELLOW}IP điện thoại có thể đổi → kiểm tra trong WiFi settings${NC}"
-    echo ""
+    echo -e "  ${YELLOW}Máy tính và điện thoại phải cùng WiFi${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    read -p "Khởi động server ngay? (y/n): " START_NOW
+    if [[ "$START_NOW" == "y" ]]; then
+        vps restart
+    fi
+
+    echo ""
+    log "Done! Gõ 'vps create' để tạo site đầu tiên."
     echo ""
     read -n 1 -s -r -p "Bấm phím bất kỳ để vào Menu điều khiển VPS..."
     echo ""
