@@ -1266,16 +1266,37 @@ case "$CMD" in
         ;;
     delete)
         DOMAIN=$1
+        if [ -z "$DOMAIN" ]; then
+            run "ls /etc/nginx/sites-enabled/" | sed 's/\.conf//g'
+            read -p "Nhập Domain cần xóa: " DOMAIN
+        fi
         SITE_NAME=$(echo $DOMAIN | sed 's/\./-/g')
-        echo "Xóa site: $DOMAIN"
-        read -p "Chắc chắn? (y/n): " OK
+        echo "Tiến hành xóa Website: $DOMAIN"
+        read -p "Bạn có chắc chắn muốn xóa toàn bộ Nginx config và Source code? (y/n): " OK
         [[ "$OK" != "y" ]] && exit 0
+        
         run "
+            # Xóa Nginx config
             rm -f /etc/nginx/sites-enabled/${SITE_NAME}.conf
             rm -f /etc/nginx/sites-available/${SITE_NAME}.conf
             nginx -s reload 2>/dev/null || true
-            echo 'Nginx config đã xóa.'
-            echo 'Xóa thủ công nếu cần: /var/www/$SITE_NAME và database'
+            
+            # Xóa Webroot
+            rm -rf /var/www/${SITE_NAME}
+            
+            # Xóa khỏi Cloudflare Config
+            python3 << PYTHON
+import yaml, os
+config_path = os.path.expanduser('~/.cloudflared/config.yml')
+if os.path.exists(config_path):
+    with open(config_path) as f: config = yaml.safe_load(f)
+    if config and 'ingress' in config:
+        config['ingress'] = [r for r in config['ingress'] if r.get('hostname') not in ['$DOMAIN', 'www.$DOMAIN']]
+        with open(config_path, 'w') as f: yaml.dump(config, f, default_flow_style=False)
+PYTHON
+            pkill -HUP cloudflared 2>/dev/null || true
+            echo 'Đã xóa Website, Nginx config và dọn dẹp Cloudflare tunnel.'
+            echo 'Lưu ý: Bạn nên vào dashboard cloudflare để xóa DNS record thủ công.'
         "
         ;;
     logs)
@@ -1289,15 +1310,16 @@ case "$CMD" in
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.2 ════════════════${NC}"
-                echo -e "  1.  Khởi động Server       5. Tạo Website mới"
-                echo -e "  2.  Dừng Server            6. Danh sách Websites"
-                echo -e "  3.  Xem Trạng thái         7. Backup Telegram"
-                echo -e "  4.  Monitor Real-time      8. Xem Log (Debug)"
-                echo -e "  9.  Mở Tmux (Attach)       0. Thoát"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.3 ════════════════${NC}"
+                echo -e "  1. Khởi động Server        6. Danh sách Websites"
+                echo -e "  2. Dừng Server             7. Xóa Website"
+                echo -e "  3. Xem Trạng thái          8. Backup Telegram"
+                echo -e "  4. Monitor Real-time       9. Xem Log (Debug)"
+                echo -e "  5. Tạo Website mới        10. Mở Tmux (Attach)"
+                echo -e "                             0. Thoát"
                 echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
                 echo ""
-                read -p "Chọn chức năng (0-9): " OPT
+                read -p "Chọn chức năng (0-10): " OPT
                 case $OPT in
                     1) vps start; sleep 2 ;;
                     2) vps stop; sleep 2 ;;
@@ -1305,9 +1327,10 @@ case "$CMD" in
                     4) vps monitor ;;
                     5) vps create ;;
                     6) vps list; echo ""; read -p "Bấm Enter để về Menu..." ;;
-                    7) vps backup; sleep 2 ;;
-                    8) vps debug; echo ""; read -p "Báo cáo log xong. Bấm Enter để về Menu..." ;;
-                    9) vps attach ;;
+                    7) vps delete; echo ""; read -p "Bấm Enter để về Menu..." ;;
+                    8) vps backup; sleep 2 ;;
+                    9) vps debug; echo ""; read -p "Báo cáo log xong. Bấm Enter để về Menu..." ;;
+                    10) vps attach ;;
                     0) exit 0 ;;
                     *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
                 esac
