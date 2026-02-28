@@ -384,8 +384,8 @@ nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
 log "PostgreSQL..."
-mkdir -p /var/run/postgresql /var/log/postgresql
-chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null || true
+mkdir -p /var/run/postgresql /var/log/postgresql /var/lib/postgresql
+chown -R postgres:postgres /var/run/postgresql /var/log/postgresql /var/lib/postgresql 2>/dev/null || true
 
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 if [ -z "$PG_VER" ]; then
@@ -1291,7 +1291,7 @@ case "$CMD" in
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v4.5 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.1 ════════════════${NC}"
                 echo -e "  1.  Khởi động Server       5. Tạo Website mới"
                 echo -e "  2.  Dừng Server            6. Danh sách Websites"
                 echo -e "  3.  Xem Trạng thái         7. Backup Telegram"
