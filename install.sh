@@ -292,7 +292,9 @@ step5_cloudflared() {
     read -p "$(echo -e ${CYAN}Nhập tên tunnel [my-server]: ${NC})" TUNNEL_NAME
     TUNNEL_NAME=${TUNNEL_NAME:-my-server}
 
-    log "Tạo tunnel: $TUNNEL_NAME"
+    log "Cấu hình tunnel: $TUNNEL_NAME"
+    # Xóa tunnel cũ nếu có để tránh lỗi credentials cũ không tồn tại
+    run_debian "cloudflared tunnel delete -f $TUNNEL_NAME 2>/dev/null || true"
     run_debian "cloudflared tunnel create $TUNNEL_NAME 2>/dev/null || true"
 
     TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null | grep '$TUNNEL_NAME' | awk '{print \$1}'")
@@ -384,9 +386,16 @@ sleep 1
 log "PostgreSQL..."
 mkdir -p /var/run/postgresql /var/log/postgresql
 chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null || true
+
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
+if [ -z "$PG_VER" ]; then
+    log "Khởi tạo PostgreSQL cluster..."
+    pg_createcluster 17 main --start >> /root/logs/startup.log 2>&1 || true
+    PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
+fi
+
 if [ -n "$PG_VER" ]; then
-    # Khởi động PostgreSQL và đảm bảo log được ghi nhận
+    # Khởi động PostgreSQL
     su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 &
 fi
 sleep 2
@@ -450,7 +459,6 @@ check "PostgreSQL"    "pgrep -f postgres"
 check "ChromaDB"      "pgrep -f chroma"
 check "Cloudflare"    "pgrep -f cloudflared"
 check "AutoRecover"   "pgrep -f auto_recover"
-check "HealthCheck"   "pgrep -f health_check"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "  RAM  : $(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')"
@@ -1204,20 +1212,19 @@ CMD=$1; shift
 run() { proot-distro login debian --shared-tmp -- bash -c "$1"; }
 
 case "$CMD" in
-    start)
-        tmux new-session -d -s vps 2>/dev/null || true
-        tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
-        echo "Đang khởi động trong Tmux (Termux)..."
-        echo "Dùng: vps attach để xem quá trình."
-        ;;
-    stop)    run "bash ~/scripts/stop.sh" ;;
-    restart)
+    start|restart)
+        echo "Đang khởi động Server sạnh sẽ (Restart)..."
         tmux kill-session -t vps 2>/dev/null || true
         run "bash ~/scripts/stop.sh"
         sleep 2
         tmux new-session -d -s vps 2>/dev/null || true
         tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
+        echo "Lệnh khởi động đã được gửi vào Tmux."
+        echo "Đang đợi dịch vụ lên xanh (10s)..."
+        sleep 10
+        run "bash ~/scripts/status.sh"
         ;;
+    stop)    run "bash ~/scripts/stop.sh" ;;
     status)   run "bash ~/scripts/status.sh" ;;
     monitor)  proot-distro login debian --shared-tmp -- bash ~/scripts/monitor.sh ;;
     create)   run "bash ~/scripts/create-site.sh" ;;
@@ -1366,12 +1373,7 @@ main() {
 
     read -p "Khởi động server ngay? (y/n): " START_NOW
     if [[ "$START_NOW" == "y" ]]; then
-        tmux kill-session -t vps 2>/dev/null || true
-        tmux new-session -d -s vps 2>/dev/null || true
-        tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
-        echo "Đang khởi động..."
-        sleep 7
-        run_debian "bash ~/scripts/status.sh"
+        vps restart
     fi
 
     echo ""
