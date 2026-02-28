@@ -245,6 +245,18 @@ fastcgi_pass unix:/run/php/php8.4-fpm.sock;
 SNIP"
 
     log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
+
+    log "Fix lỗi MariaDB root access (unix_socket)..."
+    # Khởi động MariaDB tạm thời để cấu hình
+    mysqld_safe --user=mysql --skip-networking &
+    sleep 7
+    mariadb -u root << SQL
+ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+    pkill -f mysqld
+    sleep 2
 }
 
 # ============================================================
@@ -962,13 +974,18 @@ WPEOF
     # Cài plugins qua WP-CLI
     log "Cài plugins WordPress..."
     cd /var/www/$SITE_NAME
-
-    # Redis Object Cache
-    wp plugin install redis-cache --activate --allow-root 2>/dev/null || true
-    wp redis enable --allow-root 2>/dev/null || true
-
-    # Cloudflare Flexible SSL - bắt buộc để tránh redirect loop
-    wp plugin install cloudflare-flexible-ssl --activate --allow-root 2>/dev/null || true
+    
+    # Check if wp-cli can connect to DB
+    if ! wp core is-installed --allow-root &>/dev/null; then
+        warn "Không thể kết nối DB, kiểm tra lại thông tin database!"
+        # Vẫn tiếp tục để không crash menu
+    else
+        # Redis Object Cache
+        wp plugin install redis-cache --activate --allow-root 2>/dev/null || true
+        wp redis enable --allow-root 2>/dev/null || true
+        # Cloudflare Flexible SSL
+        wp plugin install cloudflare-flexible-ssl --activate --allow-root 2>/dev/null || true
+    fi
 
     echo ""
     log "WordPress tạo xong!"
@@ -1318,7 +1335,7 @@ PYTHON
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.5 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.6 ════════════════${NC}"
                 echo -e "  1. Khởi động Server        6. Danh sách Websites"
                 echo -e "  2. Dừng Server             7. Xóa Website"
                 echo -e "  3. Xem Trạng thái          8. Backup Telegram"
