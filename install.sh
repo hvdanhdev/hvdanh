@@ -390,12 +390,15 @@ chown -R postgres:postgres /var/run/postgresql /var/log/postgresql /var/lib/post
 PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 if [ -z "$PG_VER" ]; then
     log "Khởi tạo PostgreSQL cluster..."
+    # Chạy pg_createcluster và cấp quyền lại ngay lập tức
     pg_createcluster 17 main --start >> /root/logs/startup.log 2>&1 || true
+    chown -R postgres:postgres /var/lib/postgresql /etc/postgresql 2>/dev/null || true
     PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 fi
 
 if [ -n "$PG_VER" ]; then
-    # Khởi động PostgreSQL
+    # Đảm bảo quyền trước khi start
+    chown -R postgres:postgres /var/lib/postgresql/$PG_VER/main 2>/dev/null || true
     su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 &
 fi
 sleep 2
@@ -898,7 +901,8 @@ create_wordpress() {
     [[ "$OK" != "y" ]] && exit 0
 
     log "Tạo database..."
-    mariadb << SQL
+    # Ép sử dụng user root với unix_socket
+    mariadb -u root << SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
@@ -1314,7 +1318,7 @@ PYTHON
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.4 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.5 ════════════════${NC}"
                 echo -e "  1. Khởi động Server        6. Danh sách Websites"
                 echo -e "  2. Dừng Server             7. Xóa Website"
                 echo -e "  3. Xem Trạng thái          8. Backup Telegram"
