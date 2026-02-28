@@ -768,8 +768,8 @@ read DOMAIN
 
 # Subdomain detection
 DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
-IS_SUBDOMAIN=false
-[ "$DOT_COUNT" -ge 2 ] && IS_SUBDOMAIN=true
+IS_SUBDOMAIN=False
+[ "$DOT_COUNT" -ge 2 ] && IS_SUBDOMAIN=True
 
 SITE_NAME=$(echo $DOMAIN | sed 's/\./-/g')
 
@@ -835,7 +835,6 @@ server {
     location = /wp-login.php {
         limit_req zone=wp_login burst=3 nodelay;
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param HTTPS on;
@@ -859,7 +858,6 @@ server {
     # PHP-FPM
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_param HTTPS on;
@@ -898,7 +896,7 @@ create_wordpress() {
     [[ "$OK" != "y" ]] && exit 0
 
     log "Tạo database..."
-    mariadb --user=root --skip-password << SQL
+    mariadb << SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
@@ -1291,7 +1289,7 @@ case "$CMD" in
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.1 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.2 ════════════════${NC}"
                 echo -e "  1.  Khởi động Server       5. Tạo Website mới"
                 echo -e "  2.  Dừng Server            6. Danh sách Websites"
                 echo -e "  3.  Xem Trạng thái         7. Backup Telegram"
