@@ -246,11 +246,19 @@ SNIP"
 
     log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
 
-    log "Fix lỗi MariaDB root access (unix_socket)..."
-    # Khởi động MariaDB tạm thời để cấu hình
+    log "Fix lỗi MariaDB root access (Universal Fix)..."
+    run_debian "cat > /root/.my.cnf << 'EOF'
+[client]
+user=root
+password=
+socket=/run/mysqld/mysqld.sock
+EOF"
+    run_debian "chmod 600 /root/.my.cnf"
+    
+    # Khởi động MariaDB tạm thời để cấu hình auth
     mysqld_safe --user=mysql --skip-networking &
     sleep 7
-    mariadb -u root << SQL
+    mariadb << SQL
 ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
@@ -913,8 +921,8 @@ create_wordpress() {
     [[ "$OK" != "y" ]] && exit 0
 
     log "Tạo database..."
-    # Ép sử dụng user root với unix_socket
-    mariadb -u root << SQL
+    # Sử dụng .my.cnf đã cấu hình sẵn
+    mariadb << SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
@@ -1335,7 +1343,7 @@ PYTHON
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.6 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.7 ════════════════${NC}"
                 echo -e "  1. Khởi động Server        6. Danh sách Websites"
                 echo -e "  2. Dừng Server             7. Xóa Website"
                 echo -e "  3. Xem Trạng thái          8. Backup Telegram"
