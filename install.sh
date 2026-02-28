@@ -373,19 +373,32 @@ step5_cloudflared() {
     run_debian "cloudflared tunnel delete -f '$TUNNEL_NAME' 2>/dev/null || true"
 
     log "Tạo tunnel: $TUNNEL_NAME"
-    run_debian "cloudflared tunnel create '$TUNNEL_NAME' 2>/dev/null || true"
+    # Lấy ID trực tiếp từ output của tunnel create (nếu thành công)
+    CREATE_OUTPUT=$(run_debian "cloudflared tunnel create '$TUNNEL_NAME' 2>&1")
+    TUNNEL_ID=$(echo "$CREATE_OUTPUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 
-    TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null | grep '$TUNNEL_NAME' | awk '{print \$1}'" 2>/dev/null)
+    # Fallback: lấy từ danh sách nếu create báo đã tồn tại
+    if [ -z "$TUNNEL_ID" ]; then
+        TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null" | grep -w "$TUNNEL_NAME" | awk '{print $1}' | head -1)
+    fi
     log "Tunnel ID: $TUNNEL_ID"
 
+    if [ -z "$TUNNEL_ID" ]; then
+        error "Không lấy được Tunnel ID! Hãy kiểm tra 'cloudflared tunnel list' thủ công."
+        return 1
+    fi
+
     run_debian "mkdir -p /root/.cloudflared"
-    run_debian "cat > /root/.cloudflared/config.yml << EOF
+    # Ghi config.yml theo cách an toàn hơn, tránh lỗi expansion của local shell
+    run_debian "cat > /root/.cloudflared/config.yml << 'EOF'
 tunnel: $TUNNEL_ID
 credentials-file: /root/.cloudflared/$TUNNEL_ID.json
 
 ingress:
   - service: http_status:404
 EOF"
+    # Sửa ID trong config.yml (vì heredoc 'EOF' không expand biến)
+    run_debian "sed -i \"s/\\\$TUNNEL_ID/$TUNNEL_ID/g\" /root/.cloudflared/config.yml"
 
     cat > "$DEBIAN_ROOT/root/.vps_config" << EOF
 TUNNEL_NAME=$TUNNEL_NAME
@@ -511,11 +524,10 @@ else
     echo "[!] PostgreSQL chưa cài" | tee -a /root/logs/startup.log
 fi
 
-# ─── ChromaDB ──────────────────────────────────────────────
-log "ChromaDB..."
-pkill -f chroma 2>/dev/null
-chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &
-sleep 2
+# ─── PostgreSQL + ChromaDB ────────────────────────────────
+# Chạy ở Termux native, Debian chỉ log thông tin
+log "PostgreSQL + ChromaDB: Được quản lý bởi Termux boot script."
+echo "[i] Kiểm tra trạng thái bằng 'vps status'" | tee -a /root/logs/startup.log
 
 # ─── Cloudflare Tunnel ─────────────────────────────────────
 log "Cloudflare Tunnel..."
@@ -587,7 +599,7 @@ check "Nginx"         "pgrep -x nginx"
 check "PHP-FPM"       "pgrep -f php-fpm"
 check "MariaDB"       "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null"
 check "Redis"         "redis-cli ping 2>/dev/null | grep -q PONG"
-check "PostgreSQL"    "su - postgres -c 'pg_ctl status -D \$(ls /var/lib/postgresql/*/main -d 2>/dev/null | tail -1)' 2>/dev/null | grep -q 'server is running'"
+check "PostgreSQL"    "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5432' 2>/dev/null"
 check "ChromaDB"      "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null"
 check "Cloudflare"    "pgrep -f cloudflared"
 check "AutoRecover"   "pgrep -f auto_recover.sh"
@@ -786,16 +798,8 @@ while true; do
         "redis-cli ping 2>/dev/null | grep -q PONG" \
         "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
 
-    # PostgreSQL: dùng pg_ctl trực tiếp
-    if [ -n "$PG_VER" ]; then
-        check_restart "PostgreSQL" \
-            "su - postgres -c 'pg_ctl status -D $PG_DATA' 2>/dev/null | grep -q 'server is running'" \
-            "su - postgres -c 'pg_ctl start -D $PG_DATA -l /var/log/postgresql/postgresql.log -w -t 30' &"
-    fi
-
-    check_restart "ChromaDB" \
-        "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null" \
-        "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
+    # PostgreSQL + ChromaDB: Chạy ở Termux native, không restart từ Debian proot
+    # (Tránh lỗi command not found trong auto_recover.log)
 
     check_restart "Cloudflare" \
         "pgrep -f cloudflared" \
