@@ -478,6 +478,7 @@ SCRIPT
     cat > "$DEBIAN_ROOT/root/scripts/monitor.sh" << 'SCRIPT'
 #!/bin/bash
 # Real-time monitor: RAM, CPU, Nginx requests, top processes
+export TERM=xterm-256color
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 
 echo -e "${CYAN}Monitor đang chạy... Ctrl+C để thoát${NC}"
@@ -494,6 +495,7 @@ while true; do
     # RAM
     RAM=$(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')
     RAM_PCT=$(free -m | awk 'NR==2{printf "%.0f", $3*100/$2}')
+    RAM_PCT=${RAM_PCT:-0}
     if [ "$RAM_PCT" -gt 80 ]; then
         echo -e "  RAM  : ${RED}$RAM${NC}"
     elif [ "$RAM_PCT" -gt 60 ]; then
@@ -528,7 +530,7 @@ while true; do
 
     # Top processes
     echo -e "${CYAN}  TOP PROCESSES:${NC}"
-    ps aux --sort=-%mem 2>/dev/null | awk 'NR>1 && NR<=7 {
+    ps aux 2>/dev/null | awk 'NR>1 && NR<=7 {
         printf "  %-20s CPU:%-5s MEM:%-5s\n", $11, $3, $4
     }' || true
 
@@ -1175,6 +1177,8 @@ esac
 SCRIPT
 
     run_debian "chmod +x ~/scripts/*.sh"
+    # Cấp quyền thực thi
+    run_debian "chmod -R +x ~/scripts/"
     log "Tất cả scripts tạo xong!"
 }
 
@@ -1310,7 +1314,7 @@ PYTHON
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.3 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v6.4 ════════════════${NC}"
                 echo -e "  1. Khởi động Server        6. Danh sách Websites"
                 echo -e "  2. Dừng Server             7. Xóa Website"
                 echo -e "  3. Xem Trạng thái          8. Backup Telegram"
