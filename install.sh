@@ -246,25 +246,27 @@ SNIP"
 
     log "Nginx + PHP-FPM + MariaDB + Redis + WP-CLI xong!"
 
-    log "Fix lỗi MariaDB root access (Universal Fix)..."
+    log "Fix lỗi MariaDB root access (v7.0 Final Hope)..."
     run_debian "cat > /root/.my.cnf << 'EOF'
 [client]
-user=root
+user=vps_root
 password=
 socket=/run/mysqld/mysqld.sock
 EOF"
     run_debian "chmod 600 /root/.my.cnf"
     
     # Khởi động MariaDB tạm thời để cấu hình auth
-    mysqld_safe --user=mysql --skip-networking &
-    sleep 7
+    mysqld_safe --user=mysql --skip-networking --skip-grant-tables &
+    sleep 10
     mariadb << SQL
+FLUSH PRIVILEGES;
+CREATE USER IF NOT EXISTS 'vps_root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
+GRANT ALL PRIVILEGES ON *.* TO 'vps_root'@'localhost' WITH GRANT OPTION;
 ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
-    pkill -f mysqld
-    sleep 2
+    pkill -9 -f mysqld
+    sleep 3
 }
 
 # ============================================================
@@ -412,11 +414,13 @@ if [ -z "$PG_VER" ] || [ ! -d "/var/lib/postgresql/$PG_VER/main" ]; then
     log "Khởi tạo PostgreSQL cluster..."
     rm -rf /var/lib/postgresql/* /etc/postgresql/*
     pg_createcluster 17 main >> /root/logs/startup.log 2>&1 || true
-    chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql 2>/dev/null || true
+    # Cấp quyền lại từ gốc cho PostgreSQL
+    chown -R postgres:postgres /var/lib/postgresql /etc/postgresql /var/run/postgresql /var/log/postgresql 2>/dev/null || true
     PG_VER=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 fi
 
 if [ -n "$PG_VER" ]; then
+    # Cấp quyền triệt để trước khi start
     chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql 2>/dev/null || true
     su - postgres -c "pg_ctlcluster $PG_VER main start" >> /root/logs/startup.log 2>&1 &
 fi
@@ -1344,7 +1348,7 @@ PYTHON
                 echo "  ╔═══════════════════════════════════════════════════╗"
                 echo "  ║         ANDROID VPS INSTALLER v3.0               ║"
                 echo "  ╚═══════════════════════════════════════════════════╝"
-                echo -e "${CYAN}════════════════ CONTROL PANEL v6.8 ════════════════${NC}"
+                echo -e "${CYAN}════════════════ CONTROL PANEL v7.0 ════════════════${NC}"
                 echo -e "  1. Khởi động Server        6. Danh sách Websites"
                 echo -e "  2. Dừng Server             7. Xóa Website"
                 echo -e "  3. Xem Trạng thái          8. Backup Telegram"
