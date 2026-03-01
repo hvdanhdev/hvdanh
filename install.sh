@@ -531,7 +531,6 @@ check "PHP-FPM"       "pgrep -f php-fpm"
 check "MariaDB"       "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null"
 check "Redis"         "redis-cli ping 2>/dev/null | grep -q PONG"
 check "PostgreSQL"    "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5432' 2>/dev/null"
-check "ChromaDB"      "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null"
 check "Cloudflare"    "pgrep -f cloudflared"
 check "AutoRecover"   "pgrep -f auto_recover.sh"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
@@ -581,7 +580,7 @@ while true; do
     echo ""
 
     echo -e "${CYAN}  SERVICES:${NC}"
-    for svc in nginx "php-fpm" mysqld redis-server postgres cloudflared chroma; do
+    for svc in nginx "php-fpm" mysqld redis-server postgres cloudflared; do
         if pgrep -f "$svc" > /dev/null 2>&1; then
             echo -e "  ${GREEN}●${NC} $svc"
         else
@@ -1462,12 +1461,9 @@ case "$CMD" in
         echo "  1. Cài đặt PostgreSQL (Native)"
         echo "  2. Khởi động PostgreSQL"
         echo "  3. Dừng PostgreSQL"
-        echo "  4. Cài đặt ChromaDB (Native)"
-        echo "  5. Khởi động ChromaDB"
-        echo "  6. Dừng ChromaDB"
         echo "  0. Quay lại"
         echo ""
-        read -p "Chọn (0-6): " NS_OPT
+        read -p "Chọn (0-3): " NS_OPT
         case $NS_OPT in
             1)
                 echo "Đang cài PostgreSQL..."
@@ -1486,24 +1482,6 @@ case "$CMD" in
                 echo "Xong!"
                 sleep 2
                 ;;
-            4)
-                echo "Đang cài đặt môi trường build cho ChromaDB (C++, Rust)..."
-                pkg install -y python python-pip clang make libffi openssl rust binutils
-                echo "Đang cài ChromaDB via Pip (vui lòng đợi, bước này rất lâu)..."
-                pip install chromadb
-                echo "Xong! Chọn option 5 để khởi động."
-                sleep 2
-                ;;
-            5)
-                nohup chroma run --host 127.0.0.1 --port 8000 > $PREFIX/var/log/chromadb.log 2>&1 &
-                echo "ChromaDB đang chạy ngầm trên port 8000."
-                sleep 2
-                ;;
-            6)
-                pkill -f chroma
-                echo "Xong!"
-                sleep 2
-                ;;
             *) ;;
         esac
         ;;
@@ -1513,10 +1491,6 @@ case "$CMD" in
         if command -v pg_ctl >/dev/null && [ -d "$PREFIX/var/lib/postgresql" ]; then
             echo "→ Khởi động PostgreSQL (Native)..."
             pg_ctl -D $PREFIX/var/lib/postgresql -l $PREFIX/var/log/postgresql.log start 2>/dev/null || true
-        fi
-        if command -v chroma >/dev/null; then
-            echo "→ Khởi động ChromaDB (Native)..."
-            nohup chroma run --host 127.0.0.1 --port 8000 > $PREFIX/var/log/chromadb.log 2>&1 &
         fi
 
         # 2. Khởi động Debian services
@@ -1535,7 +1509,6 @@ case "$CMD" in
         run "bash /root/scripts/stop.sh"
         # Dừng Native services
         [ -d "$PREFIX/var/lib/postgresql" ] && pg_ctl -D $PREFIX/var/lib/postgresql stop 2>/dev/null || true
-        pkill -f chroma 2>/dev/null || true
         echo "Đã dừng tất cả!"
         ;;
     status)  run "bash /root/scripts/status.sh" ;;
@@ -1568,8 +1541,6 @@ case "$CMD" in
         proot-distro login debian --shared-tmp -- tail -20 /var/log/mysql/error.log 2>/dev/null
         echo "==== POSTGRESQL LOG ===="
         proot-distro login debian --shared-tmp -- tail -20 /var/log/postgresql/postgresql.log 2>/dev/null
-        echo "==== CHROMADB LOG ===="
-        proot-distro login debian --shared-tmp -- tail -20 /root/logs/chromadb.log 2>/dev/null
         echo "==== AUTO RECOVER LOG ===="
         proot-distro login debian --shared-tmp -- tail -20 /root/logs/auto_recover.log 2>/dev/null
         ;;
@@ -1633,7 +1604,7 @@ PYTHON
             echo "  4. Monitor Real-time       9. Xem Log (Debug)"
             echo "  5. Tạo Website mới        10. Mở Tmux (Attach)"
             echo "                             11. Tối ưu hiệu năng"
-            echo "                             12. Quản lý Native (PG/Chroma)"
+            echo "                             12. Quản lý Native (PG)"
             echo "                             0. Thoát"
             echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
             echo ""
@@ -1679,7 +1650,7 @@ main() {
     echo "  • MariaDB (auth mới: vps_admin user)"
     echo "  • Redis + WP-CLI + Node.js 20"
     echo "  • PostgreSQL (pg_ctl trực tiếp, không cần systemd)"
-    echo "  • ChromaDB + Cloudflare Tunnel"
+    echo "  • Cloudflare Tunnel"
     echo "  • Auto Recovery + Health Check + Backup Telegram"
     echo "  • Fix: MariaDB auth, PostgreSQL proot, menu không văng"
     echo ""

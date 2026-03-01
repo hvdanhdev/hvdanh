@@ -8,7 +8,6 @@
 | Redis | Object cache | Tự động cài plugin WP |
 | Node.js 20 | NextJS projects | Sẵn sàng cho production |
 | PostgreSQL | Database | **Chạy Native Termux** (Ổn định hơn) |
-| ChromaDB | Vector DB | **Chạy Native Termux** (Build từ Rust) |
 | Cloudflare Tunnel | Kết nối | Fix DNS routing thông minh |
 | vps setup-wp | Tự động hóa | Cài WP Core + Plugin 1-click |
 
@@ -48,7 +47,7 @@ vps stop           # Dừng TẤT CẢ an toàn
 vps status         # Trạng thái Real-time (Xanh = Chạy, Đỏ = Dừng)
 vps monitor        # Dashboard giám sát RAM/CPU/Disk
 vps optimize       # Menu tối ưu OpCache và PHP-FPM (Số 11)
-vps native         # Menu quản lý PostgreSQL & ChromaDB (Số 12)
+vps native         # Menu quản lý PostgreSQL (Số 12)
 ```
 
 ### Quản lý Website & WordPress
@@ -77,16 +76,6 @@ Nếu script cài đặt gặp lỗi ở các dịch vụ Native (thường do m
 pkg install postgresql -y
 initdb -D $PREFIX/var/lib/postgresql
 pg_ctl -D $PREFIX/var/lib/postgresql start
-```
-
-### 2. ChromaDB (Native)
-```bash
-# Cài đặt môi trường build (C++, Rust)
-pkg install python python-pip clang make libffi openssl rust binutils -y
-# Cài đặt qua Pip (Mất 10-20 phút để biên dịch)
-pip install chromadb
-# Chạy server
-chroma run --host 127.0.0.1 --port 8000
 ```
 
 ---
@@ -118,9 +107,7 @@ Khi người dùng truy cập `https://api.example.com`:
 1. **Cloudflare & Tunnel** xử lý tương tự như WordPress.
 2. **Nginx (Debian Proot)** đóng vai trò **Reverse Proxy**, đẩy yêu cầu tới port của ứng dụng (ví dụ: `localhost:3000`).
 3. **Node.js (NextJS App)** nhận yêu cầu và xử lý logic.
-4. **NextJS** có thể kết nối với:
-   - **PostgreSQL (Native Termux)**: Lưu trữ dữ liệu quan hệ, CRM.
-   - **ChromaDB (Native Termux)**: Truy vấn Vector AI, Embedding.
+4. **NextJS** có thể kết nối với **PostgreSQL (Native Termux)**: Lưu trữ dữ liệu quan hệ, CRM.
 5. Ứng dụng trả về kết quả cho trình duyệt.
 
 ---
