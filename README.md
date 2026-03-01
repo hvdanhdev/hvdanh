@@ -14,6 +14,16 @@
 
 ---
 
+## Lưu ý Quan trọng trước khi cài đặt (DNS & Cloudflare)
+Để hệ thống hoạt động trơn tru ngay lần đầu, bạn **CẦN** thực hiện các bước sau trên Dashboard Cloudflare:
+
+1. **Trỏ NameServers**: Đảm bảo tên miền của bạn đã trỏ về DNS của Cloudflare.
+2. **Xóa Record cũ**: Xóa **TẤT CẢ** các bản ghi `A`, `AAAA`, hoặc `CNAME` cũ của tên miền (và các subdomain) mà bạn định dùng. 
+   - *Tại sao?* Nếu còn record cũ, Cloudflare Tunnel sẽ không thể tự động đè lên, dẫn đến lỗi kết nối (Error 1033).
+3. **SSL/TLS**: Chỉnh chế độ thành **Full** hoặc **Full (Strict)** để tránh lỗi vòng lặp redirect.
+
+---
+
 ## Cài đặt
 
 ### Máy mới - chạy 1 lệnh duy nhất
