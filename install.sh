@@ -290,57 +290,16 @@ EOF"
 }
 
 # ============================================================
-# BƯỚC 4: NODE.JS + POSTGRESQL + CHROMADB
+# BƯỚC 4: NODE.JS (Extra)
 # ============================================================
 step4_extra() {
-    section "BƯỚC 4: Cài Node.js + PostgreSQL + ChromaDB"
+    section "BƯỚC 4: Cài Node.js 20"
 
     log "Cài Node.js 20..."
     run_debian "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
         DEBIAN_FRONTEND=noninteractive apt install -y nodejs"
 
-    log "Cài PostgreSQL..."
-    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y postgresql postgresql-contrib"
-
-    # ── FIX POSTGRESQL (gốc rễ lỗi khởi động trong proot) ──
-    # Vấn đề: pg_ctlcluster cần kernel features không có trong proot
-    # Giải pháp: dùng pg_ctl trực tiếp với su - postgres
-    log "Khởi tạo PostgreSQL cluster đúng cách..."
-    run_debian "cat > /root/init_postgres.sh << 'INITPG'
-#!/bin/bash
-PG_VER=\$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
-if [ -z \"\$PG_VER\" ]; then
-    echo \"Không tìm thấy PostgreSQL\"
-    exit 1
-fi
-
-PG_DATA=\"/var/lib/postgresql/\$PG_VER/main\"
-PG_CONF=\"/etc/postgresql/\$PG_VER/main\"
-
-mkdir -p /var/run/postgresql /var/log/postgresql
-chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null
-
-# Khởi tạo cluster nếu chưa có
-if [ ! -f \"\$PG_DATA/PG_VERSION\" ]; then
-    rm -rf \"\$PG_DATA\"
-    mkdir -p \"\$PG_DATA\"
-    chown -R postgres:postgres \"\$PG_DATA\"
-    su - postgres -c \"pg_ctl initdb -D \$PG_DATA\" 2>&1
-fi
-
-# Cấu hình listen trên unix socket
-sed -i \"s|#unix_socket_directories.*|unix_socket_directories = '/var/run/postgresql'|\" \
-    \"\$PG_CONF/postgresql.conf\" 2>/dev/null || true
-
-echo \"PostgreSQL cluster OK: \$PG_VER\"
-INITPG"
-    run_debian "chmod +x /root/init_postgres.sh"
-    run_debian "bash /root/init_postgres.sh"
-
-    log "Cài ChromaDB..."
-    run_debian "pip3 install chromadb --break-system-packages --quiet"
-
-    log "Node.js + PostgreSQL + ChromaDB xong!"
+    log "Node.js 20 xong!"
 }
 
 # ============================================================
@@ -495,9 +454,9 @@ mkdir -p /var/log/nginx /run
 nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
-# ─── PostgreSQL ────────────────────────────────────────────
-# FIX: dùng pg_ctl trực tiếp, không dùng pg_ctlcluster (cần systemd)
-log "PostgreSQL..."
+# ─── Native Services ───────────────────────────────────────
+# (PostgreSQL & ChromaDB bây giờ được khởi động từ menu riêng trong Termux)
+# Debian chỉ làm nhiệm vụ giám sát qua port.
 PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
 if [ -n "$PG_VER" ]; then
     PG_DATA="/var/lib/postgresql/$PG_VER/main"
@@ -507,27 +466,8 @@ if [ -n "$PG_VER" ]; then
     # Khởi tạo nếu chưa có
     if [ ! -f "$PG_DATA/PG_VERSION" ]; then
         mkdir -p "$PG_DATA"
-        chown -R postgres:postgres "$PG_DATA"
-        su - postgres -c "pg_ctl initdb -D $PG_DATA" >> /root/logs/startup.log 2>&1
-        # Cấu hình socket
-        PG_CONF="/etc/postgresql/$PG_VER/main/postgresql.conf"
-        sed -i "s|#unix_socket_directories.*|unix_socket_directories = '/var/run/postgresql'|" \
-            "$PG_CONF" 2>/dev/null || true
-    fi
-
-    # Start PostgreSQL
-    su - postgres -c "pg_ctl start -D $PG_DATA \
-        -l /var/log/postgresql/postgresql.log \
-        -w -t 30" >> /root/logs/startup.log 2>&1 &
-    sleep 4
-else
-    echo "[!] PostgreSQL chưa cài" | tee -a /root/logs/startup.log
-fi
-
-# ─── PostgreSQL + ChromaDB ────────────────────────────────
-# Chạy ở Termux native, Debian chỉ log thông tin
-log "PostgreSQL + ChromaDB: Được quản lý bởi Termux boot script."
-echo "[i] Kiểm tra trạng thái bằng 'vps status'" | tee -a /root/logs/startup.log
+# (PostgreSQL & ChromaDB bây giờ được quản lý từ menu 'vps native' trong Termux)
+# Debian chỉ giám sát trạng thái qua port 5432 và 8000.
 
 # ─── Cloudflare Tunnel ─────────────────────────────────────
 log "Cloudflare Tunnel..."
@@ -557,23 +497,14 @@ echo "Dừng tất cả services..."
 pkill -9 -f "nginx" 2>/dev/null || true
 pkill -9 -f "php-fpm" 2>/dev/null || true
 
-# PostgreSQL: dừng đúng cách
-PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
-if [ -n "$PG_VER" ]; then
-    PG_DATA="/var/lib/postgresql/$PG_VER/main"
-    su - postgres -c "pg_ctl stop -D $PG_DATA -m fast" 2>/dev/null || true
-fi
-pkill -9 -f "postgres" 2>/dev/null || true
-
 pkill -9 -f "mysqld" 2>/dev/null || true
 pkill -9 -f "redis-server" 2>/dev/null || true
 pkill -9 -f "cloudflared" 2>/dev/null || true
-pkill -9 -f "chroma" 2>/dev/null || true
 pkill -9 -f "auto_recover.sh" 2>/dev/null || true
 pkill -9 -f "health_check.sh" 2>/dev/null || true
 
 rm -f /run/nginx.pid /run/php/php8.4-fpm.pid \
-      /var/run/mysqld/mysqld.pid /var/run/postgresql/.s.PGSQL.*.lock 2>/dev/null
+      /var/run/mysqld/mysqld.pid 2>/dev/null
 echo "Đã dừng tất cả!"
 SCRIPT
 
@@ -1524,6 +1455,57 @@ case "$CMD" in
         echo "Pass: $WP_PASS"
         echo "------------------------------------------"
         ;;
+    native)
+        echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║      QUẢN LÝ NATIVE SERVICES (TERMUX)        ║${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
+        echo "  1. Cài đặt PostgreSQL (Native)"
+        echo "  2. Khởi động PostgreSQL"
+        echo "  3. Dừng PostgreSQL"
+        echo "  4. Cài đặt ChromaDB (Native)"
+        echo "  5. Khởi động ChromaDB"
+        echo "  6. Dừng ChromaDB"
+        echo "  0. Quay lại"
+        echo ""
+        read -p "Chọn (0-6): " NS_OPT
+        case $NS_OPT in
+            1)
+                echo "Đang cài PostgreSQL..."
+                pkg install -y postgresql
+                initdb -D $PREFIX/var/lib/postgresql 2>/dev/null || echo "Data đã có sẵn."
+                echo "Xong! Chọn option 2 để khởi động."
+                sleep 2
+                ;;
+            2)
+                pg_ctl -D $PREFIX/var/lib/postgresql -l $PREFIX/var/log/postgresql.log start
+                echo "Xong!"
+                sleep 2
+                ;;
+            3)
+                pg_ctl -D $PREFIX/var/lib/postgresql stop
+                echo "Xong!"
+                sleep 2
+                ;;
+            4)
+                echo "Đang cài ChromaDB..."
+                pkg install -y python python-pip
+                pip install chromadb
+                echo "Xong! Chọn option 5 để khởi động."
+                sleep 2
+                ;;
+            5)
+                nohup chroma run --host 127.0.0.1 --port 8000 > $PREFIX/var/log/chromadb.log 2>&1 &
+                echo "ChromaDB đang chạy ngầm trên port 8000."
+                sleep 2
+                ;;
+            6)
+                pkill -f chroma
+                echo "Xong!"
+                sleep 2
+                ;;
+            *) ;;
+        esac
+        ;;
     start|restart)
         echo "Khởi động Server..."
         tmux kill-session -t vps 2>/dev/null || true
@@ -1631,10 +1613,11 @@ PYTHON
             echo "  4. Monitor Real-time       9. Xem Log (Debug)"
             echo "  5. Tạo Website mới        10. Mở Tmux (Attach)"
             echo "                             11. Tối ưu hiệu năng"
+            echo "                             12. Quản lý Native (PG/Chroma)"
             echo "                             0. Thoát"
             echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
             echo ""
-            read -p "Chọn chức năng (0-11): " OPT
+            read -p "Chọn chức năng (0-12): " OPT
             case $OPT in
                 1) vps start; sleep 2 ;;
                 2) vps stop; sleep 2 ;;
@@ -1647,6 +1630,7 @@ PYTHON
                 9) vps debug; echo ""; read -p "Bấm Enter để về Menu..." ;;
                 10) vps attach ;;
                 11) vps optimize ;;
+                12) vps native ;;
                 0) exit 0 ;;
                 *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
             esac
