@@ -1,9 +1,8 @@
 ﻿#!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  Android VPS Installer v4.0
-#  Stack: Nginx + PHP-FPM + MariaDB + Redis + PostgreSQL
-#         + ChromaDB + WP-CLI + Cloudflare Tunnel
-#  Kiến trúc mới: Fix gốc rễ tất cả lỗi proot/auth/menu
+#  Android VPS Installer v4.0 (Final Stable)
+#  Stack: Nginx + PHP-FPM + MariaDB + Redis + WP-CLI + Cloudflare Tunnel
+#  Kiến trúc tối ưu: Fix tất cả lỗi proot/auth/menu
 # ============================================================
 
 RED='\033[0;31m'
@@ -290,54 +289,16 @@ EOF"
 }
 
 # ============================================================
-# BƯỚC 4: NODE.JS + POSTGRESQL + CHROMADB
+# BƯỚC 4: NODE.JS
 # ============================================================
 step4_extra() {
-    section "BƯỚC 4: Cài Node.js (Debian) + PostgreSQL (Termux) + ChromaDB"
+    section "BƯỚC 4: Cài Node.js"
 
-    log "Cài Node.js 20 trong Debian..."
-    run_debian "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
+    log "Cài Node.js 20..."
+    run_debian "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
         DEBIAN_FRONTEND=noninteractive apt install -y nodejs"
 
-    # Cài php8.4-pgsql để PHP trong proot kết nối được PostgreSQL Termux
-    run_debian "DEBIAN_FRONTEND=noninteractive apt install -y php8.4-pgsql 2>/dev/null || true"
-
-    # ── PostgreSQL chạy trong TERMUX (không phải proot) ──────────────────
-    # Lý do: Android kernel không hỗ trợ shmget() cần cho PostgreSQL trong proot
-    # Termux có libandroid-shmem patch sẵn, dùng mmap thay thế → chạy được
-    log "Cài PostgreSQL trong Termux..."
-    if command -v pg_ctl > /dev/null 2>&1; then
-        warn "PostgreSQL Termux đã cài, bỏ qua..."
-    else
-        pkg install postgresql -y
-    fi
-
-    # Khởi tạo cluster nếu chưa có
-    PG_DATA="$PREFIX/var/lib/postgresql"
-    if [ ! -f "$PG_DATA/PG_VERSION" ]; then
-        log "Khởi tạo PostgreSQL cluster..."
-        mkdir -p "$PG_DATA"
-        initdb -D "$PG_DATA" --no-instructions 2>&1 | tail -5
-    else
-        warn "PostgreSQL cluster đã có sẵn."
-    fi
-
-    # Start để kiểm tra
-    pg_ctl -D "$PG_DATA" -l "$PREFIX/var/log/postgresql.log" start 2>/dev/null || true
-    sleep 2
-    if pg_ctl -D "$PG_DATA" status > /dev/null 2>&1; then
-        log "PostgreSQL Termux: OK!"
-        # Tạo user postgres để tương thích
-        createuser -s postgres 2>/dev/null || true
-    else
-        warn "PostgreSQL chưa start, sẽ thử lại khi vps start"
-    fi
-    pg_ctl -D "$PG_DATA" stop 2>/dev/null || true
-
-    log "Cài ChromaDB trong Debian..."
-    run_debian "pip3 install chromadb --break-system-packages --quiet"
-
-    log "Node.js + PostgreSQL (Termux) + ChromaDB xong!"
+    log "Node.js xong!"
 }
 
 # ============================================================
@@ -508,12 +469,6 @@ mkdir -p /var/log/nginx /run
 nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
-# ─── PostgreSQL + ChromaDB ────────────────────────────────
-# PostgreSQL chạy trong TERMUX (không phải proot) vì Android kernel
-# không hỗ trợ shmget() trong proot. Script gọi pg_start.sh ngoài Termux.
-log "PostgreSQL + ChromaDB: khởi động từ Termux (xem /root/logs/startup.log)"
-echo "[i] PostgreSQL và ChromaDB được khởi động từ Termux song song" | tee -a /root/logs/startup.log
-
 # ─── Cloudflare Tunnel ─────────────────────────────────────
 log "Cloudflare Tunnel..."
 pkill -f cloudflared 2>/dev/null
@@ -547,7 +502,6 @@ pkill -9 -f "php-fpm" 2>/dev/null || true
 pkill -9 -f "mysqld" 2>/dev/null || true
 pkill -9 -f "redis-server" 2>/dev/null || true
 pkill -9 -f "cloudflared" 2>/dev/null || true
-pkill -9 -f "chroma" 2>/dev/null || true
 pkill -9 -f "auto_recover.sh" 2>/dev/null || true
 pkill -9 -f "health_check.sh" 2>/dev/null || true
 
@@ -578,8 +532,6 @@ check "Nginx"         "pgrep -x nginx"
 check "PHP-FPM"       "pgrep -f php-fpm"
 check "MariaDB"       "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null"
 check "Redis"         "redis-cli ping 2>/dev/null | grep -q PONG"
-check "PostgreSQL"    "pg_ctl -D $PREFIX/var/lib/postgresql status 2>/dev/null | grep -q 'server is running'"
-check "ChromaDB"      "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null"
 check "Cloudflare"    "pgrep -f cloudflared"
 check "AutoRecover"   "pgrep -f auto_recover.sh"
 echo -e "${CYAN}═══════════════════════════════════════════${NC}"
@@ -776,14 +728,6 @@ while true; do
     check_restart "Redis" \
         "redis-cli ping 2>/dev/null | grep -q PONG" \
         "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
-
-    # PostgreSQL chạy trong Termux - không check trong proot
-    # auto_recover chạy trong proot nên không thể restart PG Termux trực tiếp
-    # PG Termux được giám sát bởi pg_watchdog chạy ngoài Termux
-
-    check_restart "ChromaDB" \
-        "curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null" \
-        "chroma run --host 127.0.0.1 --port 8000 > /root/logs/chromadb.log 2>&1 &"
 
     check_restart "Cloudflare" \
         "pgrep -f cloudflared" \
@@ -1232,18 +1176,6 @@ NODE_ENV=production
 PORT=${NJS_PORT}
 
 # PostgreSQL (Termux native)
-DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=${DB_NAME}
-POSTGRES_USER=${DB_USER}
-POSTGRES_PASSWORD=${DB_PASS}
-
-# ChromaDB (Termux native)
-CHROMA_URL=http://127.0.0.1:8000
-CHROMA_HOST=127.0.0.1
-CHROMA_PORT=8000
-
 # Redis (proot Debian - expose qua port)
 REDIS_URL=redis://127.0.0.1:6379
 
@@ -1337,7 +1269,6 @@ PM2CFG
     echo "  URL     : https://$DOMAIN"
     echo "  Thư mục : $NJS_DIR"
     echo "  .env    : $NJS_DIR/.env  ← connection strings đầy đủ"
-    echo "  DB      : $DB_NAME / $DB_USER"
     echo ""
     echo "  Bước tiếp theo:"
     echo "  1. Upload code vào: $NJS_DIR"
@@ -1497,48 +1428,6 @@ esac
 SCRIPT
 
     # ── pg.sh - PostgreSQL helper ──────────────────────────────
-    cat > "$DEBIAN_ROOT/root/scripts/pg.sh" << 'SCRIPT'
-#!/bin/bash
-# PostgreSQL helper - tương tự db.sh nhưng cho PostgreSQL
-CMD=$1; shift
-
-PG_CMD() { su - postgres -c "psql -c \"$1\"" 2>/dev/null; }
-
-case "$CMD" in
-    shell)
-        echo "Vào PostgreSQL shell..."
-        su - postgres -c "psql"
-        ;;
-    list)
-        echo ""; echo "DATABASES:"
-        su - postgres -c "psql -c '\l'" 2>/dev/null
-        echo ""
-        ;;
-    create)
-        DB=$1 USER=$2 PASS=$3
-        [ -z "$DB" ]   && read -p "Tên database: " DB
-        [ -z "$USER" ] && read -p "Username: " USER
-        [ -z "$PASS" ] && { read -sp "Password: " PASS; echo; }
-        su - postgres -c "psql << SQL
-CREATE DATABASE \"$DB\";
-CREATE USER \"$USER\" WITH ENCRYPTED PASSWORD '$PASS';
-GRANT ALL PRIVILEGES ON DATABASE \"$DB\" TO \"$USER\";
-SQL" 2>/dev/null
-        echo "PostgreSQL database '$DB' tạo xong!"
-        ;;
-    drop)
-        DB=$1
-        [ -z "$DB" ] && read -p "Tên database: " DB
-        read -p "Xóa '$DB'? (y/n): " OK; [ "$OK" != "y" ] && exit 0
-        su - postgres -c "psql -c 'DROP DATABASE IF EXISTS \"$DB\";'" 2>/dev/null
-        echo "Đã xóa $DB"
-        ;;
-    *)
-        echo "Cách dùng: vps pg <shell|list|create|drop>"
-        ;;
-esac
-SCRIPT
-
     run_debian "chmod +x /root/scripts/*.sh"
 
     log "Tất cả scripts tạo xong!"
@@ -1555,17 +1444,6 @@ step8_boot() {
 #!/data/data/com.termux/files/usr/bin/bash
 termux-wake-lock
 sleep 15
-
-# Khởi động PostgreSQL (Termux) trước
-PG_DATA="$PREFIX/var/lib/postgresql"
-if [ -f "$PG_DATA/PG_VERSION" ]; then
-    pg_ctl -D "$PG_DATA" -l "$PREFIX/var/log/postgresql.log" start 2>/dev/null || true
-fi
-
-# Khởi động ChromaDB (Termux)
-nohup chroma run --host 127.0.0.1 --port 8000 > "$PREFIX/var/log/chromadb.log" 2>&1 &
-
-sleep 5
 
 # Khởi động PM2 apps (NextJS) nếu đã có
 if command -v pm2 > /dev/null 2>&1; then
@@ -1599,29 +1477,6 @@ case "$CMD" in
         echo "Khởi động Server..."
         tmux kill-session -t vps 2>/dev/null || true
         run "bash /root/scripts/stop.sh"
-        # Dừng PostgreSQL Termux
-        PG_DATA_T="$PREFIX/var/lib/postgresql"
-        pg_ctl -D "$PG_DATA_T" stop -m fast 2>/dev/null || true
-        pkill -f chroma 2>/dev/null || true
-        sleep 2
-
-        # Khởi động PostgreSQL trong Termux (trước khi vào proot)
-        echo "Khởi động PostgreSQL (Termux)..."
-        if [ -f "$PG_DATA_T/PG_VERSION" ]; then
-            pg_ctl -D "$PG_DATA_T" -l "$PREFIX/var/log/postgresql.log" start 2>/dev/null || true
-            sleep 3
-            pg_ctl -D "$PG_DATA_T" status > /dev/null 2>&1 &&                 echo "[✓] PostgreSQL: RUNNING" || echo "[!] PostgreSQL: FAILED"
-        else
-            echo "[!] PostgreSQL chưa khởi tạo. Chạy: initdb -D $PG_DATA_T"
-        fi
-
-        # Khởi động ChromaDB trong Termux
-        echo "Khởi động ChromaDB (Termux)..."
-        pkill -f chroma 2>/dev/null; sleep 1
-        nohup chroma run --host 127.0.0.1 --port 8000 > "$PREFIX/var/log/chromadb.log" 2>&1 &
-        sleep 3
-        curl -sf http://127.0.0.1:8000/api/v1/heartbeat > /dev/null 2>&1 &&             echo "[✓] ChromaDB: RUNNING" || echo "[!] ChromaDB: khởi động chậm..."
-
         # Khởi động các service trong proot (Nginx, PHP, MariaDB, Redis, Cloudflare)
         tmux new-session -d -s vps 2>/dev/null || true
         tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
@@ -1631,11 +1486,7 @@ case "$CMD" in
         ;;
     stop)
         run "bash /root/scripts/stop.sh"
-        # Dừng PostgreSQL và ChromaDB chạy trong Termux
-        PG_DATA_T="$PREFIX/var/lib/postgresql"
-        pg_ctl -D "$PG_DATA_T" stop -m fast 2>/dev/null || true
-        pkill -f chroma 2>/dev/null || true
-        echo "Đã dừng PostgreSQL và ChromaDB (Termux)"
+        echo "Đã dừng tất cả services"
         ;;
     status)  run "bash /root/scripts/status.sh" ;;
     monitor) proot-distro login debian --shared-tmp -- bash /root/scripts/monitor.sh ;;
@@ -1650,44 +1501,6 @@ case "$CMD" in
     db)
         run "bash /root/scripts/db.sh $*"
         ;;
-    pg)
-        # PostgreSQL chạy trong Termux, dùng psql trực tiếp
-        PG_SUB=$1; shift
-        case "$PG_SUB" in
-            shell) psql -U "$(whoami)" postgres ;;
-            list)  psql -U "$(whoami)" -l ;;
-            create)
-                DB=$1 USER=$2 PASS=$3
-                [ -z "$DB" ] && read -p "Tên database: " DB
-                [ -z "$USER" ] && read -p "Username: " USER
-                [ -z "$PASS" ] && { read -sp "Password: " PASS; echo; }
-                psql -U "$(whoami)" -c "CREATE DATABASE "$DB";" 2>/dev/null
-                psql -U "$(whoami)" -c "CREATE USER "$USER" WITH ENCRYPTED PASSWORD '$PASS';" 2>/dev/null
-                psql -U "$(whoami)" -c "GRANT ALL PRIVILEGES ON DATABASE "$DB" TO "$USER";" 2>/dev/null
-                echo "PostgreSQL database '$DB' tạo xong!"
-                ;;
-            drop)
-                DB=$1; [ -z "$DB" ] && read -p "Database: " DB
-                read -p "Xóa '$DB'? (y/n): " OK; [ "$OK" != "y" ] && exit 0
-                psql -U "$(whoami)" -c "DROP DATABASE IF EXISTS "$DB";"
-                ;;
-            status)
-                PG_DATA_T="$PREFIX/var/lib/postgresql"
-                pg_ctl -D "$PG_DATA_T" status
-                ;;
-            start)
-                PG_DATA_T="$PREFIX/var/lib/postgresql"
-                pg_ctl -D "$PG_DATA_T" -l "$PREFIX/var/log/postgresql.log" start
-                ;;
-            stop)
-                PG_DATA_T="$PREFIX/var/lib/postgresql"
-                pg_ctl -D "$PG_DATA_T" stop -m fast
-                ;;
-            *)
-                echo "Cách dùng: vps pg <shell|list|create|drop|status|start|stop>"
-                ;;
-        esac
-        ;;
     debug)
         echo "==== STARTUP LOG ===="
         proot-distro login debian --shared-tmp -- cat /root/logs/startup.log 2>/dev/null || echo 'Không có log.'
@@ -1697,10 +1510,6 @@ case "$CMD" in
         proot-distro login debian --shared-tmp -- tail -20 /var/log/nginx/error.log 2>/dev/null
         echo "==== MARIADB ERROR ===="
         proot-distro login debian --shared-tmp -- tail -20 /var/log/mysql/error.log 2>/dev/null
-        echo "==== POSTGRESQL LOG ===="
-        proot-distro login debian --shared-tmp -- tail -20 /var/log/postgresql/postgresql.log 2>/dev/null
-        echo "==== CHROMADB LOG ===="
-        proot-distro login debian --shared-tmp -- tail -20 /root/logs/chromadb.log 2>/dev/null
         echo "==== AUTO RECOVER LOG ===="
         proot-distro login debian --shared-tmp -- tail -20 /root/logs/auto_recover.log 2>/dev/null
         ;;
@@ -2055,10 +1864,8 @@ main() {
     echo "  • Nginx + PHP-FPM 8.4 (nhẹ hơn Apache)"
     echo "  • MariaDB (auth mới: vps_admin user)"
     echo "  • Redis + WP-CLI + Node.js 20"
-    echo "  • PostgreSQL (pg_ctl trực tiếp, không cần systemd)"
-    echo "  • ChromaDB + Cloudflare Tunnel"
-    echo "  • Auto Recovery + Health Check + Backup Telegram"
-    echo "  • Fix: MariaDB auth, PostgreSQL proot, menu không văng"
+    echo "  • Cloudflare Tunnel + Auto Recovery + Health Check"
+    echo "  • Fix: MariaDB auth, cloudflare config, menu không văng"
     echo ""
     read -p "Bắt đầu cài đặt? (y/n): " CONFIRM
     [[ "$CONFIRM" != "y" ]] && echo "Hủy." && exit 0
@@ -2083,17 +1890,14 @@ main() {
     echo -e "  ${CYAN}vps create${NC}               Tạo WordPress / NextJS / Static"
     echo -e "  ${CYAN}vps nextjs example.com deploy${NC}  Build + start NextJS bằng PM2"
     echo -e "  ${CYAN}vps db shell${NC}             Vào MariaDB"
-    echo -e "  ${CYAN}vps pg shell${NC}             Vào PostgreSQL"
     echo -e "  ${CYAN}vps wp example.com help${NC}  WP-CLI"
     echo -e "  ${CYAN}vps debug${NC}                Xem log lỗi"
     echo -e "  ${CYAN}vps backup${NC}               Backup Telegram"
     echo ""
     echo -e "${YELLOW}Thay đổi chính so với v3.0:${NC}"
     echo "  ✓ MariaDB: dùng vps_admin user thay vì root (fix ERROR 1698)"
-    echo "  ✓ PostgreSQL: pg_ctl trực tiếp, không cần systemd"
     echo "  ✓ create-site: dùng return thay exit → không văng menu"
     echo "  ✓ WP plugins: retry logic, bắt lỗi đúng cách"
-    echo "  ✓ Thêm: vps pg (PostgreSQL helper)"
     echo ""
 
     # Thông tin SSH
