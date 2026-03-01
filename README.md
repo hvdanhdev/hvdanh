@@ -99,5 +99,30 @@ Dữ liệu web và scripts quản lý nằm trong Debian (`proot-distro login d
 - `/root/.vps_config` : Chứa cấu hình Tunnel và Telegram.
 
 ---
+
+## Luồng hoạt động của Website (Workflow)
+
+### 1. Website WordPress
+Khi người dùng truy cập `https://thoigianranh.com`:
+1. **Trình duyệt** gửi yêu cầu tới **Cloudflare** (SSL/TLS).
+2. **Cloudflare** chuyển hướng yêu cầu vào **Cloudflare Tunnel** (Mã hóa).
+3. **Cloudflared (Termux)** nhận yêu cầu và đẩy vào **Nginx (Debian Proot)**.
+4. **Nginx** xử lý:
+   - Nếu là file tĩnh (ảnh, css, js): Trả về ngay (Cache 30 ngày).
+   - Nếu là mã PHP: Đẩy sang **PHP-FPM 8.4**.
+5. **PHP-FPM** truy vấn dữ liệu từ **MariaDB** và **Redis Cache**.
+6. Kết quả được trả ngược lại cho người dùng.
+
+### 2. Website NextJS (Dự án AI)
+Khi người dùng truy cập `https://api.thoigianranh.com`:
+1. **Cloudflare & Tunnel** xử lý tương tự như WordPress.
+2. **Nginx (Debian Proot)** đóng vai trò **Reverse Proxy**, đẩy yêu cầu tới port của ứng dụng (ví dụ: `localhost:3000`).
+3. **Node.js (NextJS App)** nhận yêu cầu và xử lý logic.
+4. **NextJS** có thể kết nối với:
+   - **PostgreSQL (Native Termux)**: Lưu trữ dữ liệu quan hệ, CRM.
+   - **ChromaDB (Native Termux)**: Truy vấn Vector AI, Embedding.
+5. Ứng dụng trả về kết quả cho trình duyệt.
+
+---
 **Duy trì bởi hvdanhdev**
 **Phiên bản: 4.0 (Ổn định nhất cho Android VPS)**
