@@ -1487,8 +1487,9 @@ case "$CMD" in
                 sleep 2
                 ;;
             4)
-                echo "Đang cài ChromaDB..."
-                pkg install -y python python-pip
+                echo "Đang cài đặt môi trường build cho ChromaDB (C++, Rust)..."
+                pkg install -y python python-pip clang make libffi openssl rust binutils
+                echo "Đang cài ChromaDB via Pip (vui lòng đợi, bước này rất lâu)..."
                 pip install chromadb
                 echo "Xong! Chọn option 5 để khởi động."
                 sleep 2
@@ -1508,6 +1509,17 @@ case "$CMD" in
         ;;
     start|restart)
         echo "Khởi động Server..."
+        # 1. Khởi động Native Services (nếu có)
+        if command -v pg_ctl >/dev/null && [ -d "$PREFIX/var/lib/postgresql" ]; then
+            echo "→ Khởi động PostgreSQL (Native)..."
+            pg_ctl -D $PREFIX/var/lib/postgresql -l $PREFIX/var/log/postgresql.log start 2>/dev/null || true
+        fi
+        if command -v chroma >/dev/null; then
+            echo "→ Khởi động ChromaDB (Native)..."
+            nohup chroma run --host 127.0.0.1 --port 8000 > $PREFIX/var/log/chromadb.log 2>&1 &
+        fi
+
+        # 2. Khởi động Debian services
         tmux kill-session -t vps 2>/dev/null || true
         run "bash /root/scripts/stop.sh"
         sleep 2
@@ -1517,7 +1529,15 @@ case "$CMD" in
         sleep 15
         run "bash /root/scripts/status.sh"
         ;;
-    stop)    run "bash /root/scripts/stop.sh" ;;
+    stop)
+        echo "Dừng Server..."
+        # Dừng Debian services
+        run "bash /root/scripts/stop.sh"
+        # Dừng Native services
+        [ -d "$PREFIX/var/lib/postgresql" ] && pg_ctl -D $PREFIX/var/lib/postgresql stop 2>/dev/null || true
+        pkill -f chroma 2>/dev/null || true
+        echo "Đã dừng tất cả!"
+        ;;
     status)  run "bash /root/scripts/status.sh" ;;
     monitor) proot-distro login debian --shared-tmp -- bash /root/scripts/monitor.sh ;;
     create)  run "bash /root/scripts/create-site.sh" ;;
