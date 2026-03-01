@@ -1467,29 +1467,43 @@ ask "Nhập Execution Timeout mới (giây, vd: 600) [bỏ qua để giữ nguy�
 read -r NEW_TIME
 
 echo ""
-# Apply cho PHP.ini
+# Apply cho PHP.ini (Dùng hàm để check and replace/append)
+update_php() {
+    local KEY=$1 VAL=$2
+    if grep -q "^$KEY" /etc/php/8.4/fpm/php.ini; then
+        sed -i "s/^$KEY = .*/$KEY = $VAL/" /etc/php/8.4/fpm/php.ini
+    else
+        echo "$KEY = $VAL" >> /etc/php/8.4/fpm/php.ini
+    fi
+}
+
 [ -n "$NEW_UPLOAD" ] && {
-    sed -i "s/^upload_max_filesize = .*/upload_max_filesize = $NEW_UPLOAD/" /etc/php/8.4/fpm/php.ini
-    sed -i "s/^post_max_size = .*/post_max_size = $NEW_UPLOAD/" /etc/php/8.4/fpm/php.ini
+    update_php "upload_max_filesize" "$NEW_UPLOAD"
+    update_php "post_max_size" "$NEW_UPLOAD"
     log "Đã cập nhật Upload Limit lên $NEW_UPLOAD (PHP)"
 }
 [ -n "$NEW_MEM" ] && {
-    sed -i "s/^memory_limit = .*/memory_limit = $NEW_MEM/" /etc/php/8.4/fpm/php.ini
+    update_php "memory_limit" "$NEW_MEM"
     log "Đã cập nhật Memory Limit lên $NEW_MEM"
 }
 [ -n "$NEW_TIME" ] && {
-    sed -i "s/^max_execution_time = .*/max_execution_time = $NEW_TIME/" /etc/php/8.4/fpm/php.ini
-    sed -i "s/^max_input_time = .*/max_input_time = $NEW_TIME/" /etc/php/8.4/fpm/php.ini
-    log "Đã cập nhật Timeout lên $NEW_TIME giây"
+    update_php "max_execution_time" "$NEW_TIME"
+    update_php "max_input_time" "$NEW_TIME"
+    update_php "max_input_vars" "3000"
+    log "Đã cập nhật Timeout lên $NEW_TIME giây và max_input_vars=3000"
 }
 
 # Apply cho Nginx Global
 [ -n "$NEW_UPLOAD" ] && {
-    sed -i "s/client_max_body_size .*/client_max_body_size $NEW_UPLOAD;/" /etc/nginx/nginx.conf
+    if grep -q "client_max_body_size" /etc/nginx/nginx.conf; then
+        sed -i "s/client_max_body_size .*/client_max_body_size $NEW_UPLOAD;/" /etc/nginx/nginx.conf
+    else
+        sed -i "/http {/a \    client_max_body_size $NEW_UPLOAD;" /etc/nginx/nginx.conf
+    fi
     log "Đã cập nhật client_max_body_size lên $NEW_UPLOAD (Nginx Global)"
 }
 
-# Apply cho các file site lẻ (bất kỳ dòng nào chứa client_max_body_size hoặc fastcgi_read_timeout)
+# Apply cho các file site lẻ
 [ -n "$NEW_UPLOAD" ] && {
     sed -i "s/client_max_body_size .*/client_max_body_size $NEW_UPLOAD;/" /etc/nginx/sites-available/*.conf 2>/dev/null
 }
