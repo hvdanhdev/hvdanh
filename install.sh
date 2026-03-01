@@ -1947,8 +1947,9 @@ main() {
     clear
     banner
     
-    # Hỗ trợ chạy riêng lẻ một số bước (cho việc update)
-    if [[ "$1" == "--only-scripts" ]]; then
+    # Chuẩn hóa tham số (xóa \r nếu có từ Windows)
+    local CMD_ARG=$(echo "$1" | tr -d '\r')
+    if [[ "$CMD_ARG" == "--only-scripts" ]]; then
         step7_scripts
         step9_vps_command
         exit 0
