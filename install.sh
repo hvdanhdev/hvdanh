@@ -2027,4 +2027,4 @@ main() {
     vps
 }
 
-main
+main "$@"
