@@ -1341,6 +1341,75 @@ SQL
 esac
 SCRIPT
 
+    # ── optimize.sh - Performance Optimization ────────────────
+    cat > "$DEBIAN_ROOT/root/scripts/optimize.sh" << 'SCRIPT'
+#!/bin/bash
+CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+
+OPCACHE_INI="/etc/php/8.4/fpm/conf.d/10-opcache.ini"
+FPM_CONF="/etc/php/8.4/fpm/pool.d/www.conf"
+
+show_menu() {
+    clear
+    echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║          TỐI ƯU HIỆU NĂNG (BETA)             ║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "  1. BẬT/Cấu hình OpCache (Rất khuyên dùng)"
+    echo "  2. Tinh chỉnh PHP-FPM Workers (Cho máy mạnh)"
+    echo "  3. Xem thông số hiện tại"
+    echo "  4. Restart PHP-FPM để áp dụng"
+    echo "  0. Quay lại"
+    echo ""
+}
+
+while true; do
+    show_menu
+    read -p "Chọn (0-4): " OPT
+    case $OPT in
+        1)
+            echo "Đang cấu hình OpCache..."
+            cat > "$OPCACHE_INI" << EOF
+opcache.enable=1
+opcache.memory_consumption=128
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=10000
+opcache.revalidate_freq=2
+opcache.validate_timestamps=1
+EOF
+            echo -e "${GREEN}[✓] OpCache đã được bật và tối ưu!${NC}"
+            sleep 2
+            ;;
+        2)
+            echo "Tinh chỉnh PHP-FPM cho Realme 9 Pro+ hoặc tương đương..."
+            sed -i "s/^pm.max_children =.*/pm.max_children = 10/" "$FPM_CONF"
+            sed -i "s/^pm.start_servers =.*/pm.start_servers = 3/" "$FPM_CONF"
+            sed -i "s/^pm.min_spare_servers =.*/pm.min_spare_servers = 2/" "$FPM_CONF"
+            sed -i "s/^pm.max_spare_servers =.*/pm.max_spare_servers = 5/" "$FPM_CONF"
+            echo -e "${GREEN}[✓] Đã tăng số lượng PHP workers lên 10!${NC}"
+            sleep 2
+            ;;
+        3)
+            echo -e "${YELLOW}--- THÔNG SỐ HIỆN TẠI ---${NC}"
+            echo -n "OpCache: "
+            [ -f "$OPCACHE_INI" ] && grep "opcache.enable" "$OPCACHE_INI" || echo "Chưa bật"
+            echo -n "PHP-FPM max_children: "
+            grep "pm.max_children" "$FPM_CONF"
+            echo ""
+            read -p "Bấm Enter để tiếp tục..."
+            ;;
+        4)
+            echo "Đang restart PHP-FPM..."
+            pkill -f php-fpm && sleep 1
+            php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &
+            echo -e "${GREEN}[✓] Xong!${NC}"
+            sleep 1
+            ;;
+        0) break ;;
+    esac
+done
+SCRIPT
+
     # ── pg.sh - PostgreSQL helper ──────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/pg.sh" << 'SCRIPT'
 #!/bin/bash
@@ -1483,6 +1552,9 @@ case "$CMD" in
     pg)
         run "bash /root/scripts/pg.sh $*"
         ;;
+    optimize)
+        proot-distro login debian --shared-tmp -- bash /root/scripts/optimize.sh
+        ;;
     debug)
         echo "==== STARTUP LOG ===="
         proot-distro login debian --shared-tmp -- cat /root/logs/startup.log 2>/dev/null || echo 'Không có log.'
@@ -1558,10 +1630,11 @@ PYTHON
             echo "  3. Xem Trạng thái          8. Backup Telegram"
             echo "  4. Monitor Real-time       9. Xem Log (Debug)"
             echo "  5. Tạo Website mới        10. Mở Tmux (Attach)"
+            echo "                             11. Tối ưu hiệu năng"
             echo "                             0. Thoát"
             echo -e "${CYAN}════════════════════════════════════════════════════${NC}"
             echo ""
-            read -p "Chọn chức năng (0-10): " OPT
+            read -p "Chọn chức năng (0-11): " OPT
             case $OPT in
                 1) vps start; sleep 2 ;;
                 2) vps stop; sleep 2 ;;
@@ -1573,6 +1646,7 @@ PYTHON
                 8) vps backup; sleep 2 ;;
                 9) vps debug; echo ""; read -p "Bấm Enter để về Menu..." ;;
                 10) vps attach ;;
+                11) vps optimize ;;
                 0) exit 0 ;;
                 *) echo "Lựa chọn không hợp lệ."; sleep 1 ;;
             esac
@@ -1631,6 +1705,7 @@ main() {
     echo -e "  ${CYAN}vps wp example.com help${NC}  WP-CLI"
     echo -e "  ${CYAN}vps debug${NC}                Xem log lỗi"
     echo -e "  ${CYAN}vps backup${NC}               Backup Telegram"
+    echo -e "  ${CYAN}vps optimize${NC}             Tối ưu Performance"
     echo ""
     echo -e "${YELLOW}Thay đổi chính so với v3.0:${NC}"
     echo "  ✓ MariaDB: dùng vps_admin user thay vì root (fix ERROR 1698)"
