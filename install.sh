@@ -173,7 +173,7 @@ http {
     tcp_nodelay on;
     keepalive_timeout 65;
     types_hash_max_size 2048;
-    client_max_body_size 256M;
+    client_max_body_size 64M;
     server_tokens off;
 
     include /etc/nginx/mime.types;
@@ -204,14 +204,6 @@ NGINX"
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^;pm.max_requests = .*/pm.max_requests = 500/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
-
-    # Tối ưu PHP.ini mặc định
-    log "Tối ưu PHP.ini..."
-    run_debian "sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 256M/' /etc/php/8.4/fpm/php.ini"
-    run_debian "sed -i 's/^post_max_size = .*/post_max_size = 256M/' /etc/php/8.4/fpm/php.ini"
-    run_debian "sed -i 's/^memory_limit = .*/memory_limit = 512M/' /etc/php/8.4/fpm/php.ini"
-    run_debian "sed -i 's/^max_execution_time = .*/max_execution_time = 300/' /etc/php/8.4/fpm/php.ini"
-    run_debian "sed -i 's/^max_input_time = .*/max_input_time = 300/' /etc/php/8.4/fpm/php.ini"
 
     log "Cấu hình Redis..."
     run_debian "cat > /etc/redis/redis.conf << 'REDIS'
@@ -989,7 +981,7 @@ server {
         access_log off;
     }
 
-    client_max_body_size 256M;
+    client_max_body_size 64M;
 }
 NGINX
 }
@@ -1057,8 +1049,8 @@ define('WP_REDIS_HOST', '127.0.0.1');
 define('WP_REDIS_PORT', 6379);
 
 /* Performance */
-define('WP_MEMORY_LIMIT', '256M');
-define('WP_MAX_MEMORY_LIMIT', '512M');
+define('WP_MEMORY_LIMIT', '128M');
+define('WP_MAX_MEMORY_LIMIT', '256M');
 
 /* Security */
 define('DISALLOW_FILE_EDIT', true);
@@ -1436,90 +1428,6 @@ esac
 SCRIPT
 
     # ── pg.sh - PostgreSQL helper ──────────────────────────────
-# ── tune.sh ───────────────────────────────────────────────
-    cat > "$DEBIAN_ROOT/root/scripts/tune.sh" << 'SCRIPT'
-#!/bin/bash
-# VPS Tuning: Thay đổi giới hạn upload/timeout cho Nginx và PHP
-
-ask() { echo -e "\033[0;36m[?]\033[0m $1"; }
-log() { echo -e "\033[0;32m[✓]\033[0m $1"; }
-
-clear
-echo -e "\033[1;33m==== CẤU HÌNH HIỆU NĂNG (UPLOADS & TIMEOUT) ====\033[0m"
-echo ""
-
-# Đọc giá trị hiện tại
-CUR_PHP_UPLOAD=$(grep "^upload_max_filesize" /etc/php/8.4/fpm/php.ini | cut -d'=' -f2 | tr -d ' ')
-CUR_PHP_MEM=$(grep "^memory_limit" /etc/php/8.4/fpm/php.ini | cut -d'=' -f2 | tr -d ' ')
-CUR_PHP_TIME=$(grep "^max_execution_time" /etc/php/8.4/fpm/php.ini | cut -d'=' -f2 | tr -d ' ')
-
-echo "Giá trị hiện tại:"
-echo " - Upload Max Filesize : $CUR_PHP_UPLOAD"
-echo " - Memory Limit        : $CUR_PHP_MEM"
-echo " - Execution Timeout   : $CUR_PHP_TIME giây"
-echo ""
-
-ask "Nhập giới hạn Upload mới (vd: 512M) [bỏ qua để giữ nguyên]:"
-read -r NEW_UPLOAD
-ask "Nhập Memory Limit mới (vd: 512M) [bỏ qua để giữ nguyên]:"
-read -r NEW_MEM
-ask "Nhập Execution Timeout mới (giây, vd: 600) [bỏ qua để giữ nguyên]:"
-read -r NEW_TIME
-
-echo ""
-# Apply cho PHP.ini (Dùng hàm để check and replace/append)
-update_php() {
-    local KEY=$1 VAL=$2
-    if grep -q "^$KEY" /etc/php/8.4/fpm/php.ini; then
-        sed -i "s/^$KEY = .*/$KEY = $VAL/" /etc/php/8.4/fpm/php.ini
-    else
-        echo "$KEY = $VAL" >> /etc/php/8.4/fpm/php.ini
-    fi
-}
-
-[ -n "$NEW_UPLOAD" ] && {
-    update_php "upload_max_filesize" "$NEW_UPLOAD"
-    update_php "post_max_size" "$NEW_UPLOAD"
-    log "Đã cập nhật Upload Limit lên $NEW_UPLOAD (PHP)"
-}
-[ -n "$NEW_MEM" ] && {
-    update_php "memory_limit" "$NEW_MEM"
-    log "Đã cập nhật Memory Limit lên $NEW_MEM"
-}
-[ -n "$NEW_TIME" ] && {
-    update_php "max_execution_time" "$NEW_TIME"
-    update_php "max_input_time" "$NEW_TIME"
-    update_php "max_input_vars" "3000"
-    log "Đã cập nhật Timeout lên $NEW_TIME giây và max_input_vars=3000"
-}
-
-# Apply cho Nginx Global
-[ -n "$NEW_UPLOAD" ] && {
-    if grep -q "client_max_body_size" /etc/nginx/nginx.conf; then
-        sed -i "s/client_max_body_size .*/client_max_body_size $NEW_UPLOAD;/" /etc/nginx/nginx.conf
-    else
-        sed -i "/http {/a \    client_max_body_size $NEW_UPLOAD;" /etc/nginx/nginx.conf
-    fi
-    log "Đã cập nhật client_max_body_size lên $NEW_UPLOAD (Nginx Global)"
-}
-
-# Apply cho các file site lẻ
-[ -n "$NEW_UPLOAD" ] && {
-    sed -i "s/client_max_body_size .*/client_max_body_size $NEW_UPLOAD;/" /etc/nginx/sites-available/*.conf 2>/dev/null
-}
-[ -n "$NEW_TIME" ] && {
-    sed -i "s/fastcgi_read_timeout .*/fastcgi_read_timeout $NEW_TIME;/" /etc/nginx/sites-available/*.conf 2>/dev/null
-}
-
-echo ""
-log "Đang khởi động lại Nginx và PHP-FPM..."
-nginx -t >/dev/null 2>&1 && nginx -s reload 2>/dev/null || true
-pkill -USR2 -f php-fpm 2>/dev/null || true
-
-echo ""
-log "Hoàn tất! Cấu hình mới đã có hiệu lực."
-SCRIPT
-
     run_debian "chmod +x /root/scripts/*.sh"
 
     log "Tất cả scripts tạo xong!"
@@ -1592,16 +1500,6 @@ case "$CMD" in
         ;;
     db)
         run "bash /root/scripts/db.sh $*"
-        ;;
-    tune)
-        run "bash /root/scripts/tune.sh"
-        ;;
-    update-scripts)
-        echo "Đang cập nhật bộ script quản lý..."
-        # Lấy bản install.sh mới nhất để chạy riêng 2 bước update
-        wget -q -O /tmp/update_vps.sh https://raw.githubusercontent.com/hvdanhdev/hvdanh/main/install.sh
-        bash /tmp/update_vps.sh --only-scripts
-        echo "Đã cập nhật xong! Hãy thử dùng 'vps tune'."
         ;;
     debug)
         echo "==== STARTUP LOG ===="
@@ -1960,14 +1858,6 @@ VPS
 main() {
     clear
     banner
-    
-    # Chuẩn hóa tham số (xóa \r nếu có từ Windows)
-    local CMD_ARG=$(echo "$1" | tr -d '\r')
-    if [[ "$CMD_ARG" == "--only-scripts" ]]; then
-        step7_scripts
-        step9_vps_command
-        exit 0
-    fi
 
     echo -e "${YELLOW}Cài đặt Android VPS Stack v4.0${NC}"
     echo ""
@@ -2001,7 +1891,6 @@ main() {
     echo -e "  ${CYAN}vps nextjs example.com deploy${NC}  Build + start NextJS bằng PM2"
     echo -e "  ${CYAN}vps db shell${NC}             Vào MariaDB"
     echo -e "  ${CYAN}vps wp example.com help${NC}  WP-CLI"
-    echo -e "  ${CYAN}vps tune${NC}               Cấu hình upload/timeout"
     echo -e "  ${CYAN}vps debug${NC}                Xem log lỗi"
     echo -e "  ${CYAN}vps backup${NC}               Backup Telegram"
     echo ""
@@ -2042,4 +1931,4 @@ main() {
     vps
 }
 
-main "$@"
+main
