@@ -103,7 +103,7 @@ Dữ liệu web và scripts quản lý nằm trong Debian (`proot-distro login d
 ## Luồng hoạt động của Website (Workflow)
 
 ### 1. Website WordPress
-Khi người dùng truy cập `https://thoigianranh.com`:
+Khi người dùng truy cập `https://example.com`:
 1. **Trình duyệt** gửi yêu cầu tới **Cloudflare** (SSL/TLS).
 2. **Cloudflare** chuyển hướng yêu cầu vào **Cloudflare Tunnel** (Mã hóa).
 3. **Cloudflared (Termux)** nhận yêu cầu và đẩy vào **Nginx (Debian Proot)**.
@@ -114,7 +114,7 @@ Khi người dùng truy cập `https://thoigianranh.com`:
 6. Kết quả được trả ngược lại cho người dùng.
 
 ### 2. Website NextJS (Dự án AI)
-Khi người dùng truy cập `https://api.thoigianranh.com`:
+Khi người dùng truy cập `https://api.example.com`:
 1. **Cloudflare & Tunnel** xử lý tương tự như WordPress.
 2. **Nginx (Debian Proot)** đóng vai trò **Reverse Proxy**, đẩy yêu cầu tới port của ứng dụng (ví dụ: `localhost:3000`).
 3. **Node.js (NextJS App)** nhận yêu cầu và xử lý logic.
