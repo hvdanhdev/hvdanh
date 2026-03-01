@@ -1,9 +1,9 @@
 ﻿#!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  Android VPS Installer v4.0
+#  Android VPS Installer v4.0 (Final Stable)
 #  Stack: Nginx + PHP-FPM + MariaDB + Redis + PostgreSQL
-#         + ChromaDB + WP-CLI + Cloudflare Tunnel
-#  Kiáº¿n trÃºc má»›i: Fix gá»‘c rá»… táº¥t cáº£ lá»—i proot/auth/menu
+#         + WP-CLI + Cloudflare Tunnel
+#  Kiến trúc tối ưu: Fix tất cả lỗi proot/auth/menu
 # ============================================================
 
 RED='\033[0;31m'
@@ -15,48 +15,48 @@ NC='\033[0m'
 
 DEBIAN_ROOT="/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/debian"
 
-log()     { echo -e "${GREEN}[âœ“]${NC} $1"; }
+log()     { echo -e "${GREEN}[✓]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
-error()   { echo -e "${RED}[âœ—]${NC} $1"; }
+error()   { echo -e "${RED}[✗]${NC} $1"; }
 info()    { echo -e "${CYAN}[i]${NC} $1"; }
 section() {
     echo ""
-    echo -e "${BLUE}â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  $1${NC}"
-    echo -e "${BLUE}â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 banner() {
 cat << 'EOF'
 
-  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-  â•‘         ANDROID VPS INSTALLER v4.0               â•‘
-  â•‘  Nginx Â· PHP-FPM Â· MariaDB Â· Redis Â· WP-CLI      â•‘
-  â•‘  PostgreSQL Â· Cloudflare Tunnel                   â•‘
-  â•‘  Backup Telegram Â· Health Check Â· Security        â•‘
-  â•‘  Multi-site Â· Subdomain Â· Monitor Â· Auto Recovery â•‘
-  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  ╔══════════════════════════════════════════════════╗
+  ║         ANDROID VPS INSTALLER v4.0               ║
+  ║  Nginx · PHP-FPM · MariaDB · Redis · WP-CLI      ║
+  ║  PostgreSQL · Cloudflare Tunnel                  ║
+  ║  Backup Telegram · Health Check · Security       ║
+  ║  Multi-site · Subdomain · Monitor · Auto Recovery║
+  ╚══════════════════════════════════════════════════╝
 
 EOF
 }
 
-# â”€â”€â”€ Helper cháº¡y lá»‡nh trong Debian â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─── Helper chạy lệnh trong Debian ────────────────────────
 run_debian() {
     proot-distro login debian --shared-tmp -- bash -c "$1"
 }
 
 # ============================================================
-# BÆ¯á»šC 1: TERMUX
+# BƯỚC 1: TERMUX
 # ============================================================
 step1_termux() {
-    section "BÆ¯á»šC 1: CÃ i Ä‘áº·t Termux packages + SSH"
+    section "BƯỚC 1: Cài đặt Termux packages + SSH"
 
     if command -v proot-distro > /dev/null; then
-        warn "Termux tools Ä‘Ã£ cÃ³ sáºµn, bá» qua cáº­p nháº­t package..."
+        warn "Termux tools đã có sẵn, bỏ qua cập nhật package..."
     else
-        log "Cáº­p nháº­t package..."
+        log "Cập nhật package..."
         pkg update -y && pkg upgrade -y
-        log "CÃ i tools..."
+        log "Cài tools..."
         pkg install -y proot-distro wget curl git openssh python tmux
     fi
 
@@ -70,14 +70,14 @@ step1_termux() {
     fi
 
     if [ ! -f "$HOME/.ssh_password_set" ]; then
-        log "CÃ i Ä‘áº·t SSH server..."
+        log "Cài đặt SSH server..."
         echo ""
-        warn "Äáº·t password SSH Ä‘á»ƒ káº¿t ná»‘i tá»« mÃ¡y tÃ­nh (Bitvise):"
+        warn "Đặt password SSH để kết nối từ máy tính (Bitvise):"
         passwd
         touch "$HOME/.ssh_password_set"
     else
-        warn "SSH Ä‘Ã£ cÃ i Ä‘áº·t trÆ°á»›c Ä‘Ã³."
-        read -p "Báº¡n cÃ³ muá»‘n Ä‘áº·t láº¡i password SSH? (y/n): " RESET_PW
+        warn "SSH đã cài đặt trước đó."
+        read -p "Bạn có muốn đặt lại password SSH? (y/n): " RESET_PW
         if [[ "$RESET_PW" == "y" ]]; then
             passwd
         fi
@@ -91,15 +91,15 @@ step1_termux() {
 }
 
 # ============================================================
-# BÆ¯á»šC 2: DEBIAN PROOT
+# BƯỚC 2: DEBIAN PROOT
 # ============================================================
 step2_debian() {
-    section "BÆ¯á»šC 2: CÃ i Debian proot"
+    section "BƯỚC 2: Cài Debian proot"
 
     if [ -d "$DEBIAN_ROOT" ] && [ -f "$DEBIAN_ROOT/etc/debian_version" ]; then
-        warn "Debian Ä‘Ã£ cÃ i, bá» qua táº£i xuá»‘ng..."
+        warn "Debian đã cài, bỏ qua tải xuống..."
     else
-        log "CÃ i Debian..."
+        log "Cài Debian..."
         proot-distro install debian || true
     fi
 
@@ -107,41 +107,41 @@ step2_debian() {
 }
 
 # ============================================================
-# BÆ¯á»šC 3: NGINX + PHP-FPM + MARIADB + REDIS
+# BƯỚC 3: NGINX + PHP-FPM + MARIADB + REDIS
 # ============================================================
 step3_nginx_stack() {
-    section "BÆ¯á»šC 3: CÃ i Nginx + PHP-FPM + MariaDB + Redis"
+    section "BƯỚC 3: Cài Nginx + PHP-FPM + MariaDB + Redis"
 
-    log "Cáº­p nháº­t Debian..."
+    log "Cập nhật Debian..."
     if run_debian "command -v nginx > /dev/null"; then
-        warn "Dá»‹ch vá»¥ Ä‘Ã£ cÃ i Ä‘áº·t, bá» qua apt upgrade..."
+        warn "Dịch vụ đã cài đặt, bỏ qua apt upgrade..."
         run_debian "apt update -qq"
     else
         run_debian "apt update -qq && DEBIAN_FRONTEND=noninteractive apt upgrade -y"
     fi
 
-    log "Táº¡o thÆ° má»¥c cáº§n thiáº¿t..."
+    log "Tạo thư mục cần thiết..."
     run_debian "mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets \
         /etc/redis /etc/php \
         /var/log/nginx /var/log/redis /var/log/php \
         /var/www /run/php"
 
-    # Cháº·n invoke-rc.d tá»± start service (proot khÃ´ng cÃ³ systemd)
-    log "Cáº¥u hÃ¬nh policy-rc.d..."
+    # Chặn invoke-rc.d tự start service (proot không có systemd)
+    log "Cấu hình policy-rc.d..."
     run_debian "echo $'#!/bin/sh\nexit 101' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d"
     run_debian "ln -sf /bin/true /sbin/sysctl 2>/dev/null || true"
 
-    # ThÃªm repo sury.org cho PHP má»›i nháº¥t
-    log "Cáº¥u hÃ¬nh Repo PHP sury.org..."
+    # Thêm repo sury.org cho PHP mới nhất
+    log "Cấu hình Repo PHP sury.org..."
     run_debian "DEBIAN_FRONTEND=noninteractive apt install -y lsb-release ca-certificates apt-transport-https curl net-tools psmisc htop procps 2>/dev/null && \
         curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg && \
         sh -c 'echo \"deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ \$(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list' && \
         apt update -qq"
 
     if run_debian "command -v nginx > /dev/null"; then
-        warn "Nginx Ä‘Ã£ cÃ³ sáºµn, bá» qua cÃ i Ä‘áº·t gÃ³i..."
+        warn "Nginx đã có sẵn, bỏ qua cài đặt gói..."
     else
-        log "CÃ i Nginx, PHP, MariaDB, Redis..."
+        log "Cài Nginx, PHP, MariaDB, Redis..."
         run_debian "DEBIAN_FRONTEND=noninteractive apt install -y \
             nginx \
             php8.4-fpm php8.4-mysql php8.4-curl php8.4-gd php8.4-mbstring \
@@ -152,11 +152,11 @@ step3_nginx_stack() {
             cron"
     fi
 
-    log "CÃ i WP-CLI..."
+    log "Cài WP-CLI..."
     run_debian "wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
         -O /usr/local/bin/wp && chmod +x /usr/local/bin/wp"
 
-    log "Cáº¥u hÃ¬nh Nginx chÃ­nh..."
+    log "Cấu hình Nginx chính..."
     run_debian "cat > /etc/nginx/nginx.conf << 'NGINX'
 user www-data;
 worker_processes 1;
@@ -196,7 +196,7 @@ http {
 }
 NGINX"
 
-    log "Cáº¥u hÃ¬nh PHP-FPM..."
+    log "Cấu hình PHP-FPM..."
     run_debian "sed -i 's/^listen = .*/listen = \/run\/php\/php8.4-fpm.sock/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
     run_debian "sed -i 's/^pm.max_children = .*/pm.max_children = 5/' \
@@ -206,7 +206,7 @@ NGINX"
     run_debian "sed -i 's/^;pm.max_requests = .*/pm.max_requests = 500/' \
         /etc/php/8.4/fpm/pool.d/www.conf 2>/dev/null || true"
 
-    log "Cáº¥u hÃ¬nh Redis..."
+    log "Cấu hình Redis..."
     run_debian "cat > /etc/redis/redis.conf << 'REDIS'
 bind 127.0.0.1
 port 6379
@@ -232,31 +232,23 @@ include fastcgi.conf;
 fastcgi_pass unix:/run/php/php8.4-fpm.sock;
 SNIP"
 
-    # â”€â”€ FIX MARIADB AUTH (gá»‘c rá»… lá»—i ERROR 1698) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # Váº¥n Ä‘á» cÅ©: mysqld_safe cháº¡y tá»« Termux nhÆ°ng socket trong proot â†’ khÃ¡c mÃ´i trÆ°á»ng
-    # Giáº£i phÃ¡p: táº¡o script init-mariadb.sh cháº¡y TRONG proot, dÃ¹ng --skip-grant-tables
-    # Ä‘Ãºng cÃ¡ch, sau Ä‘Ã³ dÃ¹ng unix_socket plugin cho root (khÃ´ng cáº§n password)
-    log "Cáº¥u hÃ¬nh MariaDB auth Ä‘Ãºng cÃ¡ch (trong proot)..."
+    # ── FIX MARIADB AUTH ──
+    log "Cấu hình MariaDB auth đúng cách (trong proot)..."
     run_debian "cat > /root/init_mariadb.sh << 'INITDB'
 #!/bin/bash
-# Äáº£m báº£o thÆ° má»¥c vÃ  quyá»n
 mkdir -p /var/run/mysqld /var/log/mysql /var/lib/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql /var/lib/mysql 2>/dev/null
 
-# Khá»Ÿi táº¡o data dir náº¿u chÆ°a cÃ³
 if [ ! -d /var/lib/mysql/mysql ]; then
     mysql_install_db --user=mysql --datadir=/var/lib/mysql > /dev/null 2>&1
 fi
 
-# Khá»Ÿi Ä‘á»™ng táº¡m vá»›i skip-grant-tables Ä‘á»ƒ sá»­a auth
 mysqld --user=mysql --skip-networking --skip-grant-tables \
     --socket=/var/run/mysqld/mysqld.sock \
     --pid-file=/var/run/mysqld/mysqld_init.pid > /dev/null 2>&1 &
-INIT_PID=$!
+INIT_PID=\$!
 sleep 5
 
-# Fix auth: root dÃ¹ng unix_socket (khÃ´ng cáº§n password khi root)
-# vps_admin lÃ  user Ä‘á»ƒ script dÃ¹ng (native password)
 mysql --socket=/var/run/mysqld/mysqld.sock << SQL
 FLUSH PRIVILEGES;
 ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;
@@ -266,18 +258,17 @@ GRANT ALL PRIVILEGES ON *.* TO 'vps_admin'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
 
-# Dá»«ng instance táº¡m
-kill $INIT_PID 2>/dev/null
+kill \$INIT_PID 2>/dev/null
 sleep 3
 pkill -f mysqld 2>/dev/null
 sleep 2
 
-echo "MariaDB auth OK"
+echo 'MariaDB auth OK'
 INITDB"
     run_debian "chmod +x /root/init_mariadb.sh"
     run_debian "bash /root/init_mariadb.sh"
 
-    # Táº¡o file .my.cnf dÃ¹ng vps_admin (Ä‘á»ƒ mariadb command tá»± authenticate)
+    # Tạo file .my.cnf
     run_debian "cat > /root/.my.cnf << 'EOF'
 [client]
 user=vps_admin
@@ -290,27 +281,24 @@ EOF"
 }
 
 # ============================================================
-# BÆ¯á»šC 4: NODE.JS + POSTGRESQL + CHROMADB
+# BƯỚC 4: NODE.JS + POSTGRESQL (ChromaDB Removed)
 # ============================================================
 step4_extra() {
-    section "BÆ¯á»šC 4: CÃ i Node.js + PostgreSQL + ChromaDB"
+    section "BƯỚC 4: Cài Node.js 20 + PostgreSQL"
 
-    log "CÃ i Node.js 20..."
+    log "Cài Node.js 20..."
     run_debian "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null && \
         DEBIAN_FRONTEND=noninteractive apt install -y nodejs"
 
-    log "CÃ i PostgreSQL..."
+    log "Cài PostgreSQL..."
     run_debian "DEBIAN_FRONTEND=noninteractive apt install -y postgresql postgresql-contrib"
 
-    # â”€â”€ FIX POSTGRESQL (gá»‘c rá»… lá»—i khá»Ÿi Ä‘á»™ng trong proot) â”€â”€
-    # Váº¥n Ä‘á»: pg_ctlcluster cáº§n kernel features khÃ´ng cÃ³ trong proot
-    # Giáº£i phÃ¡p: dÃ¹ng pg_ctl trá»±c tiáº¿p vá»›i su - postgres
-    log "Khá»Ÿi táº¡o PostgreSQL cluster Ä‘Ãºng cÃ¡ch..."
+    log "Khởi tạo PostgreSQL cluster đúng cách..."
     run_debian "cat > /root/init_postgres.sh << 'INITPG'
 #!/bin/bash
 PG_VER=\$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
 if [ -z \"\$PG_VER\" ]; then
-    echo \"KhÃ´ng tÃ¬m tháº¥y PostgreSQL\"
+    echo \"Không tìm thấy PostgreSQL\"
     exit 1
 fi
 
@@ -320,7 +308,6 @@ PG_CONF=\"/etc/postgresql/\$PG_VER/main\"
 mkdir -p /var/run/postgresql /var/log/postgresql
 chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null
 
-# Khá»Ÿi táº¡o cluster náº¿u chÆ°a cÃ³
 if [ ! -f \"\$PG_DATA/PG_VERSION\" ]; then
     rm -rf \"\$PG_DATA\"
     mkdir -p \"\$PG_DATA\"
@@ -328,7 +315,6 @@ if [ ! -f \"\$PG_DATA/PG_VERSION\" ]; then
     su - postgres -c \"pg_ctl initdb -D \$PG_DATA\" 2>&1
 fi
 
-# Cáº¥u hÃ¬nh listen trÃªn unix socket
 sed -i \"s|#unix_socket_directories.*|unix_socket_directories = '/var/run/postgresql'|\" \
     \"\$PG_CONF/postgresql.conf\" 2>/dev/null || true
 
@@ -337,19 +323,16 @@ INITPG"
     run_debian "chmod +x /root/init_postgres.sh"
     run_debian "bash /root/init_postgres.sh"
 
-    log "CÃ i ChromaDB..."
-    run_debian "pip3 install chromadb --break-system-packages --quiet"
-
-    log "Node.js + PostgreSQL + ChromaDB xong!"
+    log "Node.js + PostgreSQL xong! (Đã loại bỏ ChromaDB để bảo vệ bộ nhớ)"
 }
 
 # ============================================================
-# BÆ¯á»šC 5: CLOUDFLARED
+# BƯỚC 5: CLOUDFLARED
 # ============================================================
 step5_cloudflared() {
-    section "BÆ¯á»šC 5: CÃ i vÃ  cáº¥u hÃ¬nh Cloudflare Tunnel"
+    section "BƯỚC 5: Cài và cấu hình Cloudflare Tunnel"
 
-    log "Táº£i cloudflared ARM64..."
+    log "Tải cloudflared ARM64..."
     run_debian "wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 \
         -O /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared"
     run_debian "grep -q '/usr/local/bin' /root/.bashrc || \
@@ -357,47 +340,43 @@ step5_cloudflared() {
 
     if [ ! -f "$DEBIAN_ROOT/root/.cloudflared/cert.pem" ]; then
         echo ""
-        warn "Sáº¯p Ä‘Äƒng nháº­p Cloudflare - copy link hiá»‡n ra vÃ  má»Ÿ trÃªn trÃ¬nh duyá»‡t!"
-        warn "Sau khi Ä‘Äƒng nháº­p xong, link sáº½ tá»± redirect vÃ  Termux sáº½ tiáº¿p tá»¥c."
+        warn "Sắp đăng nhập Cloudflare - copy link hiện ra và mở trên trình duyệt!"
+        warn "Sau khi đăng nhập xong, link sẽ tự redirect và Termux sẽ tiếp tục."
         echo ""
         run_debian "cloudflared tunnel login"
     else
-        log "Cloudflare certificate Ä‘Ã£ cÃ³ sáºµn, bá» qua Ä‘Äƒng nháº­p."
+        log "Cloudflare certificate đã có sẵn, bỏ qua đăng nhập."
     fi
 
     echo ""
-    read -p "$(echo -e ${CYAN}Nháº­p tÃªn tunnel [my-server]: ${NC})" TUNNEL_NAME
+    read -p "$(echo -e ${CYAN}Nhập tên tunnel [my-server]: ${NC})" TUNNEL_NAME
     TUNNEL_NAME=${TUNNEL_NAME:-my-server}
 
-    log "XÃ³a tunnel cÅ© náº¿u cÃ³..."
+    log "Xóa tunnel cũ nếu có..."
     run_debian "cloudflared tunnel delete -f '$TUNNEL_NAME' 2>/dev/null || true"
 
-    log "Táº¡o tunnel: $TUNNEL_NAME"
-    # Láº¥y ID trá»±c tiáº¿p tá»« output cá»§a tunnel create (náº¿u thÃ nh cÃ´ng)
+    log "Tạo tunnel: $TUNNEL_NAME"
     CREATE_OUTPUT=$(run_debian "cloudflared tunnel create '$TUNNEL_NAME' 2>&1")
     TUNNEL_ID=$(echo "$CREATE_OUTPUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 
-    # Fallback: láº¥y tá»« danh sÃ¡ch náº¿u create bÃ¡o Ä‘Ã£ tá»“n táº¡i
     if [ -z "$TUNNEL_ID" ]; then
         TUNNEL_ID=$(run_debian "cloudflared tunnel list 2>/dev/null" | grep -w "$TUNNEL_NAME" | awk '{print $1}' | head -1)
     fi
     log "Tunnel ID: $TUNNEL_ID"
 
     if [ -z "$TUNNEL_ID" ]; then
-        error "KhÃ´ng láº¥y Ä‘Æ°á»£c Tunnel ID! HÃ£y kiá»ƒm tra 'cloudflared tunnel list' thá»§ cÃ´ng."
+        error "Không lấy được Tunnel ID! Hãy kiểm tra 'cloudflared tunnel list' thủ công."
         return 1
     fi
 
     run_debian "mkdir -p /root/.cloudflared"
-    # Ghi config.yml theo cÃ¡ch an toÃ n hÆ¡n, trÃ¡nh lá»—i expansion cá»§a local shell
     run_debian "cat > /root/.cloudflared/config.yml << 'EOF'
-tunnel: $TUNNEL_ID
-credentials-file: /root/.cloudflared/$TUNNEL_ID.json
+tunnel: \$TUNNEL_ID
+credentials-file: /root/.cloudflared/\$TUNNEL_ID.json
 
 ingress:
   - service: http_status:404
 EOF"
-    # Sá»­a ID trong config.yml (vÃ¬ heredoc 'EOF' khÃ´ng expand biáº¿n)
     run_debian "sed -i \"s/\\\$TUNNEL_ID/$TUNNEL_ID/g\" /root/.cloudflared/config.yml"
 
     cat > "$DEBIAN_ROOT/root/.vps_config" << EOF
@@ -410,56 +389,55 @@ EOF
 }
 
 # ============================================================
-# BÆ¯á»šC 6: TELEGRAM CONFIG
+# BƯỚC 6: TELEGRAM CONFIG
 # ============================================================
 step6_telegram() {
-    section "BÆ¯á»šC 6: Cáº¥u hÃ¬nh Telegram"
+    section "BƯỚC 6: Cấu hình Telegram"
     echo ""
-    info "Cáº§n chuáº©n bá»‹:"
-    info "1. Nháº¯n @BotFather â†’ /newbot â†’ láº¥y Token"
-    info "2. Nháº¯n @userinfobot â†’ láº¥y Chat ID"
+    info "Cần chuẩn bị:"
+    info "1. Nhắn @BotFather → /newbot → lấy Token"
+    info "2. Nhắn @userinfobot → lấy Chat ID"
     echo ""
 
-    read -p "$(echo -e ${CYAN}Telegram Bot Token [Enter Ä‘á»ƒ bá» qua]: ${NC})" TG_TOKEN
-    read -p "$(echo -e ${CYAN}Telegram Chat ID [Enter Ä‘á»ƒ bá» qua]: ${NC})" TG_CHAT_ID
+    read -p "$(echo -e ${CYAN}Telegram Bot Token [Enter để bỏ qua]: ${NC})" TG_TOKEN
+    read -p "$(echo -e ${CYAN}Telegram Chat ID [Enter để bỏ qua]: ${NC})" TG_CHAT_ID
 
     if [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
         sed -i "s/TG_ENABLED=false/TG_ENABLED=true/" "$DEBIAN_ROOT/root/.vps_config"
         echo "TG_TOKEN=$TG_TOKEN" >> "$DEBIAN_ROOT/root/.vps_config"
         echo "TG_CHAT_ID=$TG_CHAT_ID" >> "$DEBIAN_ROOT/root/.vps_config"
-        log "Telegram Ä‘Ã£ cáº¥u hÃ¬nh!"
+        log "Telegram đã cấu hình!"
     else
-        warn "Bá» qua. Sá»­a /root/.vps_config trong Debian Ä‘á»ƒ thÃªm sau."
+        warn "Bỏ qua. Sửa /root/.vps_config trong Debian để thêm sau."
     fi
 }
 
 # ============================================================
-# BÆ¯á»šC 7: Táº O Táº¤T Cáº¢ SCRIPTS
+# BƯỚC 7: TẠO TẤT CẢ SCRIPTS
 # ============================================================
 step7_scripts() {
-    section "BÆ¯á»šC 7: Táº¡o scripts quáº£n lÃ½"
+    section "BƯỚC 7: Tạo scripts quản lý"
 
     run_debian "mkdir -p /root/scripts /root/logs /root/backup /root/projects"
 
-    # â”€â”€ start.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── start.sh ──────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/start.sh" << 'SCRIPT'
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source /root/.vps_config 2>/dev/null || true
 
 GREEN='\033[0;32m'; NC='\033[0m'
-log() { echo -e "${GREEN}[âœ“]${NC} $1" | tee -a /root/logs/startup.log; }
+log() { echo -e "${GREEN}[✓]${NC} $1" | tee -a /root/logs/startup.log; }
 
 mkdir -p /root/logs
 echo "--- VPS START: $(date) ---" > /root/logs/startup.log
 
-# â”€â”€â”€ MariaDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# MariaDB
 log "MariaDB..."
 pkill -f mysqld 2>/dev/null; sleep 2
 mkdir -p /var/run/mysqld /var/log/mysql
 chown -R mysql:mysql /var/run/mysqld /var/log/mysql 2>/dev/null || true
 
-# Khá»Ÿi táº¡o datadir náº¿u chÆ°a cÃ³
 if [ ! -d /var/lib/mysql/mysql ]; then
     mysql_install_db --user=mysql --datadir=/var/lib/mysql > /dev/null 2>&1
 fi
@@ -470,33 +448,31 @@ mysqld --user=mysql \
     > /var/log/mysql/error.log 2>&1 &
 sleep 3
 
-# Kiá»ƒm tra MariaDB khá»Ÿi Ä‘á»™ng thÃ nh cÃ´ng
 if ! mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null; then
-    echo "[!] MariaDB chÆ°a sáºµn sÃ ng, Ä‘á»£i thÃªm..." | tee -a /root/logs/startup.log
+    echo "[!] MariaDB chưa sẵn sàng, đợi thêm..." | tee -a /root/logs/startup.log
     sleep 5
 fi
 
-# â”€â”€â”€ Redis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Redis
 log "Redis..."
 mkdir -p /var/log/redis /var/run/redis
 chown -R redis:redis /var/log/redis /var/run/redis 2>/dev/null || true
 redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &
 sleep 1
 
-# â”€â”€â”€ PHP-FPM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# PHP-FPM
 log "PHP-FPM..."
 mkdir -p /run/php
 php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &
 sleep 1
 
-# â”€â”€â”€ Nginx â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Nginx
 log "Nginx..."
 mkdir -p /var/log/nginx /run
 nginx -g "daemon off;" > /root/logs/nginx.log 2>&1 &
 sleep 1
 
-# â”€â”€â”€ PostgreSQL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# FIX: dÃ¹ng pg_ctl trá»±c tiáº¿p, khÃ´ng dÃ¹ng pg_ctlcluster (cáº§n systemd)
+# PostgreSQL
 log "PostgreSQL..."
 PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
 if [ -n "$PG_VER" ]; then
@@ -504,31 +480,17 @@ if [ -n "$PG_VER" ]; then
     mkdir -p /var/run/postgresql /var/log/postgresql
     chown -R postgres:postgres /var/run/postgresql /var/log/postgresql 2>/dev/null || true
 
-    # Khá»Ÿi táº¡o náº¿u chÆ°a cÃ³
     if [ ! -f "$PG_DATA/PG_VERSION" ]; then
-        mkdir -p "$PG_DATA"
-        chown -R postgres:postgres "$PG_DATA"
         su - postgres -c "pg_ctl initdb -D $PG_DATA" >> /root/logs/startup.log 2>&1
-        # Cáº¥u hÃ¬nh socket
-        PG_CONF="/etc/postgresql/$PG_VER/main/postgresql.conf"
-        sed -i "s|#unix_socket_directories.*|unix_socket_directories = '/var/run/postgresql'|" \
-            "$PG_CONF" 2>/dev/null || true
     fi
 
-    # Start PostgreSQL
-    su - postgres -c "pg_ctl start -D $PG_DATA \
-        -l /var/log/postgresql/postgresql.log \
-        -w -t 30" >> /root/logs/startup.log 2>&1 &
+    su - postgres -c "pg_ctl start -D $PG_DATA -l /var/log/postgresql/postgresql.log -w -t 30" >> /root/logs/startup.log 2>&1 &
     sleep 4
 else
-    echo "[!] PostgreSQL chÆ°a cÃ i" | tee -a /root/logs/startup.log
+    echo "[!] PostgreSQL chưa cài" | tee -a /root/logs/startup.log
 fi
 
-# â”€â”€â”€ PostgreSQL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# PostgreSQL cháº¡y Native trong Debian proot.
-log "PostgreSQL..."
-
-# â”€â”€â”€ Cloudflare Tunnel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Cloudflare Tunnel
 log "Cloudflare Tunnel..."
 pkill -f cloudflared 2>/dev/null
 if [ -n "$TUNNEL_NAME" ] && [ -f "/root/.cloudflared/config.yml" ]; then
@@ -536,7 +498,7 @@ if [ -n "$TUNNEL_NAME" ] && [ -f "/root/.cloudflared/config.yml" ]; then
         > /root/logs/cloudflared.log 2>&1 &
     sleep 2
 else
-    echo "[!] Cloudflare chÆ°a cáº¥u hÃ¬nh" | tee -a /root/logs/startup.log
+    echo "[!] Cloudflare chưa cấu hình" | tee -a /root/logs/startup.log
 fi
 
 log "Health Check daemon..."
@@ -544,19 +506,16 @@ pkill -f health_check.sh 2>/dev/null
 nohup bash /root/scripts/health_check.sh > /root/logs/health_check.log 2>&1 &
 
 echo "--- ALL SERVICES STARTED ---" | tee -a /root/logs/startup.log
-
-# Auto Recovery cháº¡y foreground Ä‘á»ƒ giá»¯ proot session sá»‘ng
 exec bash /root/scripts/auto_recover.sh
 SCRIPT
 
-    # â”€â”€ stop.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── stop.sh ───────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/stop.sh" << 'SCRIPT'
 #!/bin/bash
-echo "Dá»«ng táº¥t cáº£ services..."
+echo "Dừng tất cả services..."
 pkill -9 -f "nginx" 2>/dev/null || true
 pkill -9 -f "php-fpm" 2>/dev/null || true
 
-# PostgreSQL: dá»«ng Ä‘Ãºng cÃ¡ch
 PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
 if [ -n "$PG_VER" ]; then
     PG_DATA="/var/lib/postgresql/$PG_VER/main"
@@ -572,10 +531,10 @@ pkill -9 -f "health_check.sh" 2>/dev/null || true
 
 rm -f /run/nginx.pid /run/php/php8.4-fpm.pid \
       /var/run/mysqld/mysqld.pid /var/run/postgresql/.s.PGSQL.*.lock 2>/dev/null
-echo "ÄÃ£ dá»«ng táº¥t cáº£!"
+echo "Đã dừng tất cả!"
 SCRIPT
 
-    # â”€â”€ status.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── status.sh ─────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/status.sh" << 'SCRIPT'
 #!/bin/bash
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -583,16 +542,16 @@ GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 check() {
     local NAME=$1 CHECK=$2
     if eval "$CHECK" > /dev/null 2>&1; then
-        echo -e "  ${GREEN}â— RUNNING${NC}  $1"
+        echo -e "  ${GREEN}● RUNNING${NC}  $1"
     else
-        echo -e "  ${RED}â—‹ STOPPED${NC}  $1"
+        echo -e "  ${RED}○ STOPPED${NC}  $1"
     fi
 }
 
 echo ""
-echo -e "${CYAN}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo -e "${CYAN}            SERVER STATUS                  ${NC}"
-echo -e "${CYAN}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 check "Nginx"         "pgrep -x nginx"
 check "PHP-FPM"       "pgrep -f php-fpm"
 check "MariaDB"       "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null"
@@ -600,7 +559,7 @@ check "Redis"         "redis-cli ping 2>/dev/null | grep -q PONG"
 check "PostgreSQL"    "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5432' 2>/dev/null"
 check "Cloudflare"    "pgrep -f cloudflared"
 check "AutoRecover"   "pgrep -f auto_recover.sh"
-echo -e "${CYAN}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "  RAM  : $(free -m | awk 'NR==2{printf "%s/%s MB (%.0f%%)", $3,$2,$3*100/$2}')"
 echo "  Disk : $(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')"
@@ -610,1051 +569,162 @@ echo -e "${CYAN}  WEBSITES:${NC}"
 for conf in /etc/nginx/sites-enabled/*; do
     [ -f "$conf" ] || continue
     domain=$(grep -m1 "server_name" "$conf" 2>/dev/null | awk '{print $2}' | tr -d ';')
-    [ -n "$domain" ] && echo "  â†’ https://$domain"
+    [ -n "$domain" ] && echo "  → https://$domain"
 done
 echo ""
 SCRIPT
 
-    # â”€â”€ monitor.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── monitor.sh ────────────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/monitor.sh" << 'SCRIPT'
 #!/bin/bash
 export TERM=xterm-256color
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 
-echo -e "${CYAN}Monitor Ä‘ang cháº¡y... Ctrl+C Ä‘á»ƒ thoÃ¡t${NC}"
-
 while true; do
     clear
-    echo -e "${CYAN}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${NC}"
-    echo -e "${CYAN}â•‘          ANDROID VPS MONITOR                 â•‘${NC}"
-    echo -e "${CYAN}â•‘          $(date '+%H:%M:%S  %d/%m/%Y')               â•‘${NC}"
-    echo -e "${CYAN}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+    echo -e "${CYAN}╔════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║          ANDROID VPS MONITOR                 ║${NC}"
+    echo -e "${CYAN}║          $(date '+%H:%M:%S  %d/%m/%Y')               ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════╝${NC}"
     echo ""
 
     RAM_PCT=$(free -m | awk 'NR==2{printf "%.0f", $3*100/$2}')
-    RAM_PCT=${RAM_PCT:-0}
     RAM=$(free -m | awk 'NR==2{printf "%s/%s MB (%d%%)", $3,$2,$3*100/$2}')
-    if [ "$RAM_PCT" -gt 80 ]; then
-        echo -e "  RAM  : ${RED}$RAM${NC}"
-    elif [ "$RAM_PCT" -gt 60 ]; then
-        echo -e "  RAM  : ${YELLOW}$RAM${NC}"
-    else
-        echo -e "  RAM  : ${GREEN}$RAM${NC}"
-    fi
+    if [ "${RAM_PCT:-0}" -gt 80 ]; then echo -e "  RAM  : ${RED}$RAM${NC}"
+    elif [ "${RAM_PCT:-0}" -gt 60 ]; then echo -e "  RAM  : ${YELLOW}$RAM${NC}"
+    else echo -e "  RAM  : ${GREEN}$RAM${NC}"; fi
 
     echo "  Load : $(uptime | awk -F'load average:' '{print $2}')"
     echo "  Disk : $(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')"
     echo ""
 
     echo -e "${CYAN}  SERVICES:${NC}"
-    for svc in nginx "php-fpm" mysqld redis-server postgres cloudflared chroma; do
-        if pgrep -f "$svc" > /dev/null 2>&1; then
-            echo -e "  ${GREEN}â—${NC} $svc"
-        else
-            echo -e "  ${RED}â—‹${NC} $svc"
-        fi
+    for svc in nginx "php-fpm" mysqld redis-server postgres cloudflared; do
+        if pgrep -f "$svc" > /dev/null 2>&1; then echo -e "  ${GREEN}●${NC} $svc"
+        else echo -e "  ${RED}○${NC} $svc"; fi
     done
-
-    echo ""
-    if [ -f /var/log/nginx/access.log ]; then
-        echo -e "${CYAN}  RECENT REQUESTS:${NC}"
-        tail -5 /var/log/nginx/access.log 2>/dev/null | \
-            awk '{print "  " $1" "$7" "$9}' || echo "  (no log)"
-    fi
 
     echo ""
     echo -e "${CYAN}  WEBSITES:${NC}"
     for conf in /etc/nginx/sites-enabled/*; do
         [ -f "$conf" ] || continue
         domain=$(grep -m1 "server_name" "$conf" 2>/dev/null | awk '{print $2}' | tr -d ';')
-        [ -n "$domain" ] && echo "  â†’ https://$domain"
+        [ -n "$domain" ] && echo "  → https://$domain"
     done
-
     sleep 3
 done
 SCRIPT
 
-    # â”€â”€ health_check.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── health_check.sh ───────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/health_check.sh" << 'SCRIPT'
 #!/bin/bash
 source /root/.vps_config 2>/dev/null || true
-
 LOG=/root/logs/health_check.log
-INTERVAL=300  # 5 phÃºt
+INTERVAL=300
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG; }
-
 tg_send() {
     [[ "$TG_ENABLED" == "true" ]] || return
     curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-        -d chat_id="$TG_CHAT_ID" \
-        -d text="$1" \
-        -d parse_mode="HTML" > /dev/null 2>&1
+        -d chat_id="$TG_CHAT_ID" -d text="$1" -d parse_mode="HTML" > /dev/null 2>&1
 }
 
-log "Health Check started"
-tg_send "ðŸš€ <b>Android VPS Online</b>
-â° $(date '+%H:%M %d/%m/%Y')
-ðŸ“± RAM: $(free -m | awk 'NR==2{printf "%s/%s MB", $3,$2}')
-ðŸ’¾ Disk: $(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')"
-
 while true; do
-    sleep $INTERVAL
-
-    RAM_USED=$(free -m | awk 'NR==2{print $3}')
-    RAM_TOTAL=$(free -m | awk 'NR==2{print $2}')
     RAM_PCT=$(free -m | awk 'NR==2{printf "%.0f", $3*100/$2}')
     DISK=$(df -h ~ | awk 'NR==2{print $3"/"$2" ("$5")"}')
     SITES=$(ls /etc/nginx/sites-enabled/ 2>/dev/null | wc -l)
-
-    if [ "${RAM_PCT:-0}" -gt 80 ]; then
-        RAM_ICON="ðŸ”´"
-    elif [ "${RAM_PCT:-0}" -gt 60 ]; then
-        RAM_ICON="ðŸŸ¡"
-    else
-        RAM_ICON="ðŸŸ¢"
-    fi
-
-    tg_send "ðŸ’“ <b>VPS Heartbeat</b>
-â° $(date '+%H:%M %d/%m/%Y')
-${RAM_ICON} RAM: ${RAM_USED}/${RAM_TOTAL} MB (${RAM_PCT}%)
-ðŸ’¾ Disk: $DISK
-ðŸŒ Sites: $SITES Ä‘ang cháº¡y"
-
-    log "Heartbeat sent. RAM: ${RAM_PCT}%"
+    tg_send "💓 <b>VPS Heartbeat</b>: RAM ${RAM_PCT}%, Disk $DISK, Sites $SITES"
+    sleep $INTERVAL
 done
 SCRIPT
 
-    # â”€â”€ auto_recover.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── auto_recover.sh ───────────────────────────────────────
     cat > "$DEBIAN_ROOT/root/scripts/auto_recover.sh" << 'SCRIPT'
 #!/bin/bash
-export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source /root/.vps_config 2>/dev/null || true
-
-GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
-log() { echo "[$(date '+%H:%M:%S')] $1" | tee -a /root/logs/auto_recover.log; }
-
-tg_send() {
-    [[ "$TG_ENABLED" == "true" ]] || return
-    curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-        -d chat_id="$TG_CHAT_ID" -d text="$1" > /dev/null 2>&1
-}
-
 check_restart() {
     local NAME=$1 CHECK=$2 START=$3
     if ! eval "$CHECK" > /dev/null 2>&1; then
-        log "WARN: $NAME stopped â†’ restarting..."
         eval "$START" 2>/dev/null
         sleep 4
-        if eval "$CHECK" > /dev/null 2>&1; then
-            log "OK: $NAME restarted"
-            tg_send "ðŸ”„ $NAME tá»± restart thÃ nh cÃ´ng"
-        else
-            log "FAIL: $NAME restart failed"
-            tg_send "âŒ $NAME restart THáº¤T Báº I!"
-        fi
     fi
 }
-
-log "=== Auto Recovery started ==="
-RAM_LIMIT=6500
-RAM_CRITICAL=7500
-
-PG_VER=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
-PG_DATA="/var/lib/postgresql/${PG_VER}/main"
-
 while true; do
-    RAM_USED=$(free -m | awk 'NR==2{print $3}')
-
-    if [ "${RAM_USED:-0}" -gt "$RAM_CRITICAL" ]; then
-        log "CRITICAL RAM: ${RAM_USED}MB"
-        tg_send "ðŸš¨ RAM CRITICAL: ${RAM_USED}MB - Ä‘ang dá»n!"
-        redis-cli flushall 2>/dev/null || true
-        sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-        sleep 10
-    elif [ "${RAM_USED:-0}" -gt "$RAM_LIMIT" ]; then
-        log "HIGH RAM: ${RAM_USED}MB - flush Redis cache"
-        redis-cli flushall 2>/dev/null || true
-    fi
-
-    check_restart "Nginx" \
-        "pgrep -x nginx" \
-        "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
-
-    check_restart "PHP-FPM" \
-        "pgrep -f php-fpm" \
-        "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
-
-    check_restart "MariaDB" \
-        "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null" \
-        "mysqld --user=mysql --socket=/var/run/mysqld/mysqld.sock \
-            --pid-file=/var/run/mysqld/mysqld.pid \
-            > /var/log/mysql/error.log 2>&1 &"
-
-    check_restart "Redis" \
-        "redis-cli ping 2>/dev/null | grep -q PONG" \
-        "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
-
-    # PostgreSQL + ChromaDB: Cháº¡y á»Ÿ Termux native, khÃ´ng restart tá»« Debian proot
-    # (TrÃ¡nh lá»—i command not found trong auto_recover.log)
-
-    check_restart "Cloudflare" \
-        "pgrep -f cloudflared" \
-        "cloudflared tunnel --config /root/.cloudflared/config.yml run \$TUNNEL_NAME \
-            > /root/logs/cloudflared.log 2>&1 &"
-
-    # Log rotation > 10MB
-    for F in /root/logs/*.log; do
-        [ -f "$F" ] && [ "$(stat -c%s "$F" 2>/dev/null || echo 0)" -gt 10485760 ] && \
-            mv "$F" "${F}.old" && log "Rotated: $F"
-    done
-
+    check_restart "Nginx" "pgrep -x nginx" "nginx -g 'daemon off;' > /root/logs/nginx.log 2>&1 &"
+    check_restart "PHP-FPM" "pgrep -f php-fpm" "php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &"
+    check_restart "MariaDB" "mysqladmin --defaults-file=/root/.my.cnf ping --silent 2>/dev/null" \
+        "mysqld --user=mysql --socket=/var/run/mysqld/mysqld.sock > /var/log/mysql/error.log 2>&1 &"
+    check_restart "Redis" "redis-cli ping | grep -q PONG" "redis-server /etc/redis/redis.conf --daemonize no > /root/logs/redis.log 2>&1 &"
     sleep 45
 done
 SCRIPT
 
-    # â”€â”€ backup.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    cat > "$DEBIAN_ROOT/root/scripts/backup.sh" << 'SCRIPT'
-#!/bin/bash
-source /root/.vps_config 2>/dev/null || true
-BACKUP_DIR=/root/backup
-DATE=$(date +%Y%m%d_%H%M%S)
-LOG=/root/logs/backup.log
-
-mkdir -p $BACKUP_DIR
-log()       { echo "[$(date '+%H:%M:%S')] $1" | tee -a $LOG; }
-tg_send()   {
-    [[ "$TG_ENABLED" == "true" ]] || return
-    curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-        -d chat_id="$TG_CHAT_ID" -d text="$1" > /dev/null 2>&1
-}
-tg_upload() {
-    local FILE=$1 CAPTION=$2
-    [[ "$TG_ENABLED" == "true" ]] || return
-    local SIZE=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
-    if [ "$SIZE" -lt 52428800 ]; then
-        curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendDocument" \
-            -F chat_id="$TG_CHAT_ID" \
-            -F document=@"$FILE" \
-            -F caption="$CAPTION" > /dev/null 2>&1 && \
-            log "  â†’ Telegram: $(basename $FILE)"
-    else
-        log "  â†’ File quÃ¡ lá»›n (>50MB), lÆ°u local"
-        tg_send "âš ï¸ $CAPTION: file $(du -sh $FILE | cut -f1) > 50MB, lÆ°u local"
-    fi
-}
-
-log "=== BACKUP: $DATE ==="
-tg_send "ðŸ”„ Backup báº¯t Ä‘áº§u lÃºc $(date '+%H:%M %d/%m/%Y')"
-COUNT=0
-
-for SITE_DIR in /var/www/*/; do
-    SITE_NAME=$(basename $SITE_DIR)
-    [[ "$SITE_NAME" == "html" ]] && continue
-
-    log "Backup: $SITE_NAME"
-    FILES_BAK=$BACKUP_DIR/${SITE_NAME}_files_${DATE}.tar.gz
-    tar -czf "$FILES_BAK" -C /var/www "$SITE_NAME" 2>/dev/null
-    tg_upload "$FILES_BAK" "ðŸ“ $SITE_NAME files"
-
-    WP_CONFIG="$SITE_DIR/wp-config.php"
-    if [ -f "$WP_CONFIG" ]; then
-        DB_NAME=$(grep "DB_NAME" "$WP_CONFIG" | grep -oP "'\K[^']+(?=')" | tail -1)
-        if [ -n "$DB_NAME" ]; then
-            DB_BAK=$BACKUP_DIR/${SITE_NAME}_db_${DATE}.sql.gz
-            mariadb-dump --defaults-file=/root/.my.cnf "$DB_NAME" 2>/dev/null | gzip > "$DB_BAK"
-            tg_upload "$DB_BAK" "ðŸ—„ï¸ $SITE_NAME DB ($DB_NAME)"
-        fi
-    fi
-    COUNT=$((COUNT + 1))
-done
-
-find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete 2>/dev/null
-find $BACKUP_DIR -name "*.sql.gz" -mtime +7 -delete 2>/dev/null
-
-log "=== BACKUP XONG: $COUNT sites ==="
-tg_send "âœ… Backup xong! $COUNT sites. $(date '+%H:%M %d/%m/%Y')"
-SCRIPT
-
-    # â”€â”€ create-site.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # FIX QUAN TRá»ŒNG:
-    # 1. Táº¥t cáº£ hÃ m dÃ¹ng `return` thay vÃ¬ `exit` â†’ khÃ´ng vÄƒng ra menu
-    # 2. MariaDB dÃ¹ng --defaults-file=/root/.my.cnf (vps_admin user)
-    # 3. WP-CLI check DB trÆ°á»›c khi install plugin â†’ dÃ¹ng subshell trÃ¡nh lá»—i
+    # ── create-site.sh ──
     cat > "$DEBIAN_ROOT/root/scripts/create-site.sh" << 'SCRIPT'
 #!/bin/bash
-export PATH=$PATH:/usr/local/bin:/root/.local/bin
 source /root/.vps_config 2>/dev/null || true
-
-GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-log()   { echo -e "${GREEN}[âœ“]${NC} $1"; }
-ask()   { echo -e "${CYAN}[?]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
-err()   { echo -e "${RED}[âœ—]${NC} $1"; }
-
-echo ""
-echo "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"
-echo "â•‘           Táº O WEBSITE Má»šI               â•‘"
-echo "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
-echo ""
-echo "  1) WordPress"
-echo "  2) NextJS (reverse proxy)"
-echo "  3) Static HTML"
-echo ""
-read -p "Chá»n (1-3): " SITE_TYPE
-
-echo ""
-ask "Domain Ä‘áº§y Ä‘á»§ (vd: example.com hoáº·c api.example.com):"
-read -r DOMAIN
-
-if [ -z "$DOMAIN" ]; then
-    err "Domain khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng!"
-    exit 0
-fi
-
-DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
-IS_SUBDOMAIN=false
-[ "$DOT_COUNT" -ge 2 ] && IS_SUBDOMAIN=true
-
+echo "Tạo Website mới..."
+read -p "Domain (vd: example.com): " DOMAIN
+[ -z "$DOMAIN" ] && exit 0
 SITE_NAME=$(echo "$DOMAIN" | sed 's/\./-/g')
-
-# â”€â”€ HÃ m cáº­p nháº­t Cloudflare Tunnel config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-add_to_tunnel() {
-    local SERVICE_URL=$1
-    log "Cáº­p nháº­t Cloudflare Tunnel..."
-
-    python3 << PYTHON
-import yaml, os, sys
-
-config_path = os.path.expanduser('~/.cloudflared/config.yml')
-try:
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-except Exception as e:
-    print(f"  KhÃ´ng Ä‘á»c Ä‘Æ°á»£c config: {e}")
-    sys.exit(0)
-
-new_rules = [{'hostname': '${DOMAIN}', 'service': '${SERVICE_URL}'}]
-
-if "${IS_SUBDOMAIN}" == "false":
-    new_rules.append({'hostname': 'www.${DOMAIN}', 'service': '${SERVICE_URL}'})
-
-existing = [r for r in config.get('ingress', []) if 'hostname' in r]
-catch_all = [r for r in config.get('ingress', []) if 'hostname' not in r]
-existing_domains = [r['hostname'] for r in existing]
-
-for rule in new_rules:
-    if rule['hostname'] not in existing_domains:
-        existing.append(rule)
-
-config['ingress'] = existing + catch_all
-with open(config_path, 'w') as f:
-    yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-print("  Tunnel config cáº­p nháº­t OK!")
-PYTHON
-
-    # Sá»­ dá»¥ng TUNNEL_ID thay vÃ¬ TUNNEL_NAME Ä‘á»ƒ chÃ­nh xÃ¡c tuyá»‡t Ä‘á»‘i
-    if [ -n "$TUNNEL_ID" ]; then
-        cloudflared tunnel route dns "$TUNNEL_ID" "$DOMAIN" 2>/dev/null && \
-            log "DNS $DOMAIN â†’ OK" || \
-            warn "Lá»—i tá»± Ä‘á»™ng thÃªm DNS. HÃ£y vÃ o Cloudflare Dashboard xÃ³a record cÅ© cá»§a '$DOMAIN' (náº¿u cÃ³) vÃ  thá»­ láº¡i."
-
-        if [ "$IS_SUBDOMAIN" = "false" ]; then
-            cloudflared tunnel route dns "$TUNNEL_ID" "www.$DOMAIN" 2>/dev/null || true
-        fi
-    else
-        warn "KhÃ´ng tÃ¬m tháº¥y TUNNEL_ID trong .vps_config, bá» qua route DNS tá»± Ä‘á»™ng."
-    fi
-
-    pkill -HUP cloudflared 2>/dev/null || true
-}
-
-# â”€â”€ Nginx config cho WordPress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-create_nginx_wordpress() {
-    local EXTRA_SERVER_NAME=""
-    [ "$IS_SUBDOMAIN" = "false" ] && EXTRA_SERVER_NAME=" www.$DOMAIN"
-
-    cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
-server {
-    listen 8080;
-    server_name ${DOMAIN}${EXTRA_SERVER_NAME};
-    root /var/www/${SITE_NAME};
-    index index.php;
-
-    set_real_ip_from 0.0.0.0/0;
-    real_ip_header X-Forwarded-For;
-
-    location = /wp-login.php {
-        limit_req zone=wp_login burst=3 nodelay;
-        include snippets/fastcgi-php.conf;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_param HTTPS on;
-    }
-
-    location = /xmlrpc.php { deny all; return 444; }
-    location ~* /\.(ht|git|env) { deny all; return 444; }
-    location ~* wp-config.php { deny all; return 444; }
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$args;
-    }
-
-    location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_param HTTPS on;
-        fastcgi_read_timeout 300;
-    }
-
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|woff2|svg|webp)\$ {
-        expires 30d;
-        add_header Cache-Control "public, no-transform";
-        access_log off;
-    }
-
-    client_max_body_size 64M;
-}
-NGINX
-}
-
-# â”€â”€ Táº¡o WordPress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-create_wordpress() {
-    echo ""
-    ask "TÃªn database (vd: myblog_db):"
-    read -r DB_NAME
-    ask "Username database (vd: myblog_user):"
-    read -r DB_USER
-    ask "Password database:"
-    read -rs DB_PASS
-    echo ""
-
-    if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
-        err "Database info khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng!"
-        return 1
-    fi
-
-    echo ""
-    echo "  Type    : WordPress + Redis Cache"
-    echo "  Domain  : https://$DOMAIN"
-    echo "  ThÆ° má»¥c : /var/www/$SITE_NAME"
-    echo "  Database: $DB_NAME / $DB_USER"
-    read -p "XÃ¡c nháº­n? (y/n): " OK
-    [ "$OK" != "y" ] && return 0
-
-    # â”€â”€ Táº¡o database (FIX: dÃ¹ng .my.cnf â†’ vps_admin cÃ³ quyá»n Ä‘áº§y Ä‘á»§) â”€â”€
-    log "Táº¡o database..."
-    if mariadb --defaults-file=/root/.my.cnf << SQL
-CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
-GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
-FLUSH PRIVILEGES;
-SQL
-    then
-        log "Database táº¡o thÃ nh cÃ´ng!"
-    else
-        err "Lá»—i táº¡o database! Kiá»ƒm tra MariaDB Ä‘ang cháº¡y: pgrep mysqld"
-        return 1
-    fi
-
-    log "Táº£i WordPress..."
-    mkdir -p /var/www/$SITE_NAME
-    cd /tmp || return 1
-    wget -q https://wordpress.org/latest.tar.gz -O wp.tar.gz
-    tar -xzf wp.tar.gz
-    cp -r wordpress/. /var/www/$SITE_NAME/
-    chown -R www-data:www-data /var/www/$SITE_NAME
-    chmod -R 755 /var/www/$SITE_NAME
-    rm -rf /tmp/wordpress /tmp/wp.tar.gz
-
-    log "Cáº¥u hÃ¬nh wp-config.php..."
-    cp /var/www/$SITE_NAME/wp-config-sample.php /var/www/$SITE_NAME/wp-config.php
-    sed -i "s/database_name_here/$DB_NAME/"   /var/www/$SITE_NAME/wp-config.php
-    sed -i "s/username_here/$DB_USER/"        /var/www/$SITE_NAME/wp-config.php
-    sed -i "s/password_here/$DB_PASS/"        /var/www/$SITE_NAME/wp-config.php
-
-    cat >> /var/www/$SITE_NAME/wp-config.php << WPEOF
-
-/* Redis Cache */
-define('WP_CACHE', true);
-define('WP_REDIS_HOST', '127.0.0.1');
-define('WP_REDIS_PORT', 6379);
-
-/* Performance */
-define('WP_MEMORY_LIMIT', '128M');
-define('WP_MAX_MEMORY_LIMIT', '256M');
-
-/* Security */
-define('DISALLOW_FILE_EDIT', true);
-define('DISALLOW_FILE_MODS', false);
-define('WP_AUTO_UPDATE_CORE', 'minor');
-
-/* Cloudflare HTTPS fix */
-if (isset(\$_SERVER['HTTP_X_FORWARDED_PROTO']) &&
-    \$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
-    \$_SERVER['HTTPS'] = 'on';
-}
-define('WP_HOME', 'https://${DOMAIN}');
-define('WP_SITEURL', 'https://${DOMAIN}');
-WPEOF
-
-    log "Táº¡o Nginx vhost..."
-    create_nginx_wordpress
-    ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
-    nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || warn "Nginx reload lá»—i, kiá»ƒm tra láº¡i"
-
-    add_to_tunnel "http://localhost:8080"
-
-    # â”€â”€ CÃ i plugins qua WP-CLI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # FIX: cháº¡y trong subshell, dÃ¹ng --skip-check náº¿u WP chÆ°a install
-    # KhÃ´ng Ä‘á»ƒ lá»—i WP-CLI lÃ m vÄƒng script ra ngoÃ i
-    log "CÃ i plugins WordPress..."
-    cd /var/www/$SITE_NAME || true
-
-    # Chá» MariaDB sáºµn sÃ ng
-    local RETRY=0
-    while [ $RETRY -lt 5 ]; do
-        if wp db check --allow-root --quiet 2>/dev/null; then
-            break
-        fi
-        RETRY=$((RETRY + 1))
-        warn "DB chÆ°a sáºµn sÃ ng, thá»­ láº¡i láº§n $RETRY/5..."
-        sleep 3
-    done
-
-    if wp db check --allow-root --quiet 2>/dev/null; then
-        # CÃ i redis-cache
-        if wp plugin install redis-cache --activate --allow-root 2>/dev/null; then
-            wp redis enable --allow-root 2>/dev/null || true
-            log "Plugin redis-cache Ä‘Ã£ cÃ i!"
-        else
-            warn "KhÃ´ng cÃ i Ä‘Æ°á»£c redis-cache (bá» qua)"
-        fi
-
-        # CÃ i cloudflare-flexible-ssl
-        if wp plugin install cloudflare-flexible-ssl --activate --allow-root 2>/dev/null; then
-            log "Plugin cloudflare-flexible-ssl Ä‘Ã£ cÃ i!"
-        else
-            warn "KhÃ´ng cÃ i Ä‘Æ°á»£c cloudflare-flexible-ssl (bá» qua)"
-        fi
-    else
-        warn "WP chÆ°a Ä‘Æ°á»£c install (chÆ°a cháº¡y wp core install). CÃ i plugin sau qua: vps wp $DOMAIN plugin install redis-cache --activate"
-    fi
-
-    echo ""
-    log "WordPress Ä‘Ã£ sáºµn sÃ ng (bÆ°á»›c cuá»‘i)!"
-    warn "Báº N Cáº¦N CHáº Y Lá»†NH SAU Äá»‚ CÃ€I Äáº¶T DATABASE WP:"
-    echo -e "${CYAN}  vps setup-wp $DOMAIN${NC}"
-    echo ""
-}
-
-# â”€â”€ Táº¡o NextJS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-create_nextjs() {
-    echo ""
-    ask "Port NextJS Ä‘ang cháº¡y [3000]:"
-    read -r NJS_PORT
-    NJS_PORT=${NJS_PORT:-3000}
-
-    echo ""
-    echo "  Domain : https://$DOMAIN"
-    echo "  Proxy  : 127.0.0.1:$NJS_PORT"
-    read -p "XÃ¡c nháº­n? (y/n): " OK
-    [ "$OK" != "y" ] && return 0
-
-    cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
-server {
-    listen 8080;
-    server_name $DOMAIN;
-
-    location / {
-        proxy_pass http://127.0.0.1:$NJS_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_read_timeout 300;
-    }
-}
-NGINX
-
-    ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
-    nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || warn "Nginx reload lá»—i"
-
-    add_to_tunnel "http://localhost:8080"
-
-    echo ""
-    log "NextJS proxy táº¡o xong!"
-    echo "  URL   : https://$DOMAIN â†’ localhost:$NJS_PORT"
-    warn "Äáº£m báº£o NextJS Ä‘ang cháº¡y trÃªn port $NJS_PORT"
-    echo ""
-}
-
-# â”€â”€ Táº¡o Static HTML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-create_static() {
-    mkdir -p /var/www/$SITE_NAME
-    cat > /var/www/$SITE_NAME/index.html << HTML
-<!DOCTYPE html>
-<html lang="vi">
-<head><meta charset="UTF-8"><title>$DOMAIN</title></head>
-<body><h1>$DOMAIN Ä‘ang hoáº¡t Ä‘á»™ng!</h1></body>
-</html>
-HTML
-    chown -R www-data:www-data /var/www/$SITE_NAME
-
-    cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
+mkdir -p /var/www/$SITE_NAME
+echo "<h1>$DOMAIN works!</h1>" > /var/www/$SITE_NAME/index.html
+chown -R www-data:www-data /var/www/$SITE_NAME
+cat > "/etc/nginx/sites-available/${SITE_NAME}.conf" << NGINX
 server {
     listen 8080;
     server_name $DOMAIN;
     root /var/www/$SITE_NAME;
     index index.html;
     location / { try_files \$uri \$uri/ =404; }
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js)\$ { expires 30d; }
 }
 NGINX
-
-    ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
-    nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || warn "Nginx reload lá»—i"
-
-    add_to_tunnel "http://localhost:8080"
-
-    echo ""
-    log "Static site táº¡o xong!"
-    echo "  URL     : https://$DOMAIN"
-    echo "  ThÆ° má»¥c : /var/www/$SITE_NAME"
-    echo ""
-}
-
-# â”€â”€ Dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-case "$SITE_TYPE" in
-    1) create_wordpress ;;
-    2) create_nextjs ;;
-    3) create_static ;;
-    *) err "Lá»±a chá»n khÃ´ng há»£p lá»‡"; exit 0 ;;
-esac
-SCRIPT
-
-    # â”€â”€ wp.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    cat > "$DEBIAN_ROOT/root/scripts/wp.sh" << 'SCRIPT'
-#!/bin/bash
-DOMAIN=$1; shift; CMD="$*"
-
-if [ -z "$DOMAIN" ]; then
-    echo ""
-    echo "CÃ¡ch dÃ¹ng: vps wp <domain> <lá»‡nh>"
-    echo ""
-    echo "VÃ­ dá»¥:"
-    echo "  vps wp example.com plugin list"
-    echo "  vps wp example.com plugin update --all"
-    echo "  vps wp example.com cache flush"
-    echo "  vps wp example.com db export backup.sql"
-    echo ""
-    exit 0
-fi
-
-SITE_NAME=$(echo "$DOMAIN" | sed 's/\./-/g')
-SITE_DIR="/var/www/$SITE_NAME"
-
-if [ ! -d "$SITE_DIR" ]; then
-    echo "KhÃ´ng tÃ¬m tháº¥y site: $SITE_DIR"
-    exit 1
-fi
-
-cd "$SITE_DIR"
-wp $CMD --allow-root --path="$SITE_DIR"
-SCRIPT
-
-    # â”€â”€ db.sh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    cat > "$DEBIAN_ROOT/root/scripts/db.sh" << 'SCRIPT'
-#!/bin/bash
-CMD=$1; shift
-
-case "$CMD" in
-    shell)
-        echo "VÃ o MariaDB shell (vps_admin)..."
-        mariadb --defaults-file=/root/.my.cnf
-        ;;
-    list)
-        echo ""
-        echo "DATABASES:"
-        mariadb --defaults-file=/root/.my.cnf -e "SHOW DATABASES;" 2>/dev/null | \
-            grep -v "^Database\|information_schema\|performance_schema\|mysql\|sys"
-        echo ""
-        ;;
-    create)
-        DB=$1 USER=$2 PASS=$3
-        [ -z "$DB" ]   && read -p "TÃªn database: " DB
-        [ -z "$USER" ] && read -p "Username: " USER
-        [ -z "$PASS" ] && { read -sp "Password: " PASS; echo; }
-        mariadb --defaults-file=/root/.my.cnf << SQL
-CREATE DATABASE IF NOT EXISTS \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '$USER'@'localhost' IDENTIFIED BY '$PASS';
-GRANT ALL PRIVILEGES ON \`$DB\`.* TO '$USER'@'localhost';
-FLUSH PRIVILEGES;
-SQL
-        echo "Database $DB táº¡o xong!"
-        ;;
-    drop)
-        DB=$1
-        [ -z "$DB" ] && read -p "TÃªn database cáº§n xÃ³a: " DB
-        read -p "XÃ³a database '$DB'? (y/n): " OK
-        [ "$OK" != "y" ] && exit 0
-        mariadb --defaults-file=/root/.my.cnf -e "DROP DATABASE IF EXISTS \`$DB\`;"
-        echo "ÄÃ£ xÃ³a $DB"
-        ;;
-    export)
-        DB=$1
-        FILE=${2:-/root/backup/${DB}_$(date +%Y%m%d).sql.gz}
-        mkdir -p "$(dirname $FILE)"
-        mariadb-dump --defaults-file=/root/.my.cnf "$DB" 2>/dev/null | gzip > "$FILE"
-        echo "Export: $FILE ($(du -sh "$FILE" | cut -f1))"
-        ;;
-    import)
-        DB=$1 FILE=$2
-        [ ! -f "$FILE" ] && echo "File khÃ´ng tá»“n táº¡i: $FILE" && exit 1
-        if [[ "$FILE" == *.gz ]]; then
-            gunzip -c "$FILE" | mariadb --defaults-file=/root/.my.cnf "$DB"
-        else
-            mariadb --defaults-file=/root/.my.cnf "$DB" < "$FILE"
-        fi
-        echo "Import xong!"
-        ;;
-    *)
-        echo ""
-        echo "CÃ¡ch dÃ¹ng: vps db <lá»‡nh>"
-        echo ""
-        echo "  vps db shell              VÃ o MariaDB shell"
-        echo "  vps db list               Danh sÃ¡ch databases"
-        echo "  vps db create [db] [user] Táº¡o database má»›i"
-        echo "  vps db drop <db>          XÃ³a database"
-        echo "  vps db export <db> [file] Export database"
-        echo "  vps db import <db> <file> Import database"
-        echo ""
-        ;;
-esac
-SCRIPT
-
-    # â”€â”€ optimize.sh - Performance Optimization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    cat > "$DEBIAN_ROOT/root/scripts/optimize.sh" << 'SCRIPT'
-#!/bin/bash
-CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-
-OPCACHE_INI="/etc/php/8.4/fpm/conf.d/10-opcache.ini"
-FPM_CONF="/etc/php/8.4/fpm/pool.d/www.conf"
-
-show_menu() {
-    clear
-    echo -e "${CYAN}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${NC}"
-    echo -e "${CYAN}â•‘          Tá»I Æ¯U HIá»†U NÄ‚NG (BETA)             â•‘${NC}"
-    echo -e "${CYAN}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
-    echo ""
-    echo "  1. Báº¬T/Cáº¥u hÃ¬nh OpCache (Ráº¥t khuyÃªn dÃ¹ng)"
-    echo "  2. Tinh chá»‰nh PHP-FPM Workers (Cho mÃ¡y máº¡nh)"
-    echo "  3. Xem thÃ´ng sá»‘ hiá»‡n táº¡i"
-    echo "  4. Restart PHP-FPM Ä‘á»ƒ Ã¡p dá»¥ng"
-    echo "  0. Quay láº¡i"
-    echo ""
-}
-
-while true; do
-    show_menu
-    read -p "Chá»n (0-4): " OPT
-    case $OPT in
-        1)
-            echo "Äang cáº¥u hÃ¬nh OpCache..."
-            cat > "$OPCACHE_INI" << EOF
-opcache.enable=1
-opcache.memory_consumption=128
-opcache.interned_strings_buffer=8
-opcache.max_accelerated_files=10000
-opcache.revalidate_freq=2
-opcache.validate_timestamps=1
-EOF
-            echo -e "${GREEN}[âœ“] OpCache Ä‘Ã£ Ä‘Æ°á»£c báº­t vÃ  tá»‘i Æ°u!${NC}"
-            sleep 2
-            ;;
-        2)
-            echo "Tinh chá»‰nh PHP-FPM cho Realme 9 Pro+ hoáº·c tÆ°Æ¡ng Ä‘Æ°Æ¡ng..."
-            sed -i "s/^pm.max_children =.*/pm.max_children = 10/" "$FPM_CONF"
-            sed -i "s/^pm.start_servers =.*/pm.start_servers = 3/" "$FPM_CONF"
-            sed -i "s/^pm.min_spare_servers =.*/pm.min_spare_servers = 2/" "$FPM_CONF"
-            sed -i "s/^pm.max_spare_servers =.*/pm.max_spare_servers = 5/" "$FPM_CONF"
-            echo -e "${GREEN}[âœ“] ÄÃ£ tÄƒng sá»‘ lÆ°á»£ng PHP workers lÃªn 10!${NC}"
-            sleep 2
-            ;;
-        3)
-            echo -e "${YELLOW}--- THÃ”NG Sá» HIá»†N Táº I ---${NC}"
-            echo -n "OpCache: "
-            [ -f "$OPCACHE_INI" ] && grep "opcache.enable" "$OPCACHE_INI" || echo "ChÆ°a báº­t"
-            echo -n "PHP-FPM max_children: "
-            grep "pm.max_children" "$FPM_CONF"
-            echo ""
-            read -p "Báº¥m Enter Ä‘á»ƒ tiáº¿p tá»¥c..."
-            ;;
-        4)
-            echo "Äang restart PHP-FPM..."
-            pkill -f php-fpm && sleep 1
-            php-fpm8.4 -F -R > /root/logs/php-fpm.log 2>&1 &
-            echo -e "${GREEN}[âœ“] Xong!${NC}"
-            sleep 1
-            ;;
-        0) break ;;
-    esac
-done
-SCRIPT
-
-    # â”€â”€ pg.sh - PostgreSQL helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    cat > "$DEBIAN_ROOT/root/scripts/pg.sh" << 'SCRIPT'
-#!/bin/bash
-# PostgreSQL helper - tÆ°Æ¡ng tá»± db.sh nhÆ°ng cho PostgreSQL
-CMD=$1; shift
-
-PG_CMD() { su - postgres -c "psql -c \"$1\"" 2>/dev/null; }
-
-case "$CMD" in
-    shell)
-        echo "VÃ o PostgreSQL shell..."
-        su - postgres -c "psql"
-        ;;
-    list)
-        echo ""; echo "DATABASES:"
-        su - postgres -c "psql -c '\l'" 2>/dev/null
-        echo ""
-        ;;
-    create)
-        DB=$1 USER=$2 PASS=$3
-        [ -z "$DB" ]   && read -p "TÃªn database: " DB
-        [ -z "$USER" ] && read -p "Username: " USER
-        [ -z "$PASS" ] && { read -sp "Password: " PASS; echo; }
-        su - postgres -c "psql << SQL
-CREATE DATABASE \"$DB\";
-CREATE USER \"$USER\" WITH ENCRYPTED PASSWORD '$PASS';
-GRANT ALL PRIVILEGES ON DATABASE \"$DB\" TO \"$USER\";
-SQL" 2>/dev/null
-        echo "PostgreSQL database '$DB' táº¡o xong!"
-        ;;
-    drop)
-        DB=$1
-        [ -z "$DB" ] && read -p "TÃªn database: " DB
-        read -p "XÃ³a '$DB'? (y/n): " OK; [ "$OK" != "y" ] && exit 0
-        su - postgres -c "psql -c 'DROP DATABASE IF EXISTS \"$DB\";'" 2>/dev/null
-        echo "ÄÃ£ xÃ³a $DB"
-        ;;
-    *)
-        echo "CÃ¡ch dÃ¹ng: vps pg <shell|list|create|drop>"
-        ;;
-esac
+ln -sf /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
+nginx -s reload 2>/dev/null
+echo "Site $DOMAIN đã tạo xong!"
 SCRIPT
 
     run_debian "chmod +x /root/scripts/*.sh"
-
-    log "Táº¥t cáº£ scripts táº¡o xong!"
+    log "Tất cả scripts tạo xong!"
 }
 
 # ============================================================
-# BÆ¯á»šC 8: TERMUX BOOT
+# BƯỚC 8: BOOT + COMMAND
 # ============================================================
 step8_boot() {
-    section "BÆ¯á»šC 8: CÃ i Ä‘áº·t tá»± Ä‘á»™ng khá»Ÿi Ä‘á»™ng"
     mkdir -p ~/.termux/boot
-
     cat > ~/.termux/boot/start-vps.sh << 'BOOT'
 #!/data/data/com.termux/files/usr/bin/bash
 termux-wake-lock
 sleep 15
-tmux new-session -d -s vps 2>/dev/null || true
-tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
+tmux new-session -d -s vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh"
 BOOT
-
     chmod +x ~/.termux/boot/start-vps.sh
-    log "Boot script xong!"
 }
 
-# ============================================================
-# BÆ¯á»šC 9: Lá»†NH VPS
-# ============================================================
 step9_vps_command() {
-    section "BÆ¯á»šC 9: Táº¡o lá»‡nh 'vps'"
-
     cat > "$PREFIX/bin/vps" << 'VPS'
 #!/data/data/com.termux/files/usr/bin/bash
-CYAN='\033[0;36m'; NC='\033[0m'
 CMD=$1; shift
-
 run() { proot-distro login debian --shared-tmp -- bash -c "$1"; }
-
 case "$CMD" in
-    setup-wp)
-        DOMAIN=$1
-        if [ -z "$DOMAIN" ]; then
-            echo "CÃ¡ch dÃ¹ng: vps setup-wp <domain>"
-            exit 1
-        fi
-        echo "CÃ i Ä‘áº·t WordPress Core cho $DOMAIN..."
-        read -p "TÃªn Website [Example Project]: " WP_TITLE
-        WP_TITLE=${WP_TITLE:-"Example Project"}
-        read -p "Admin User [admin]: " WP_USER
-        WP_USER=${WP_USER:-admin}
-        read -p "Admin Email [admin@$DOMAIN]: " WP_EMAIL
-        WP_EMAIL=${WP_EMAIL:-admin@$DOMAIN}
-        read -sp "Admin Password: " WP_PASS
-        echo ""
-
-        if [ -z "$WP_PASS" ]; then
-            WP_PASS=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 12)
-            echo "Máº­t kháº©u tá»± táº¡o: $WP_PASS"
-        fi
-
-        run "vps wp $DOMAIN core install --url='https://$DOMAIN' --title='$WP_TITLE' --admin_user='$WP_USER' --admin_password='$WP_PASS' --admin_email='$WP_EMAIL' && \
-             vps wp $DOMAIN plugin install redis-cache --activate && \
-             vps wp $DOMAIN plugin install cloudflare-flexible-ssl --activate"
-
-        echo "------------------------------------------"
-        echo "CÃ€I Äáº¶T HOÃ€N Táº¤T!"
-        echo "URL: https://$DOMAIN"
-        echo "Admin: https://$DOMAIN/wp-admin"
-        echo "User: $WP_USER"
-        echo "Pass: $WP_PASS"
-        echo "------------------------------------------"
-        ;;
     start|restart)
-        echo "Khá»Ÿi Ä‘á»™ng Server..."
         tmux kill-session -t vps 2>/dev/null || true
-        run "bash /root/scripts/stop.sh"
-        sleep 2
-        tmux new-session -d -s vps 2>/dev/null || true
-        tmux send-keys -t vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh" Enter
-        echo "Äang Ä‘á»£i services khá»Ÿi Ä‘á»™ng (15s)..."
-        sleep 15
+        tmux new-session -d -s vps "proot-distro login debian --shared-tmp -- bash /root/scripts/start.sh"
+        echo "Đang khởi động Server..."
+        sleep 5
         run "bash /root/scripts/status.sh"
         ;;
-    stop)    run "bash /root/scripts/stop.sh" ;;
+    stop)    run "bash /root/scripts/stop.sh"; tmux kill-session -t vps 2>/dev/null ;;
     status)  run "bash /root/scripts/status.sh" ;;
     monitor) proot-distro login debian --shared-tmp -- bash /root/scripts/monitor.sh ;;
     create)  run "bash /root/scripts/create-site.sh" ;;
-    backup)  run "bash /root/scripts/backup.sh" ;;
-    attach)  tmux attach -t vps ;;
+    debug)   run "cat /root/logs/startup.log" ;;
     debian)  proot-distro login debian --shared-tmp ;;
-    wp)
-        DOMAIN=$1; shift
-        run "bash /root/scripts/wp.sh $DOMAIN $*"
-        ;;
-    db)
-        run "bash /root/scripts/db.sh $*"
-        ;;
-    pg)
-        run "bash /root/scripts/pg.sh $*"
-        ;;
-    optimize)
-        proot-distro login debian --shared-tmp -- bash /root/scripts/optimize.sh
-        ;;
-    debug)
-        echo "==== STARTUP LOG ===="
-        proot-distro login debian --shared-tmp -- cat /root/logs/startup.log 2>/dev/null || echo 'KhÃ´ng cÃ³ log.'
-        echo "==== CLOUDFLARE LOG ===="
-        proot-distro login debian --shared-tmp -- tail -20 /root/logs/cloudflared.log 2>/dev/null
-        echo "==== NGINX ERROR ===="
-        proot-distro login debian --shared-tmp -- tail -20 /var/log/nginx/error.log 2>/dev/null
-        echo "==== MARIADB ERROR ===="
-        proot-distro login debian --shared-tmp -- tail -20 /var/log/mysql/error.log 2>/dev/null
-        echo "==== POSTGRESQL LOG ===="
-        proot-distro login debian --shared-tmp -- tail -20 /var/log/postgresql/postgresql.log 2>/dev/null
-        echo "==== AUTO RECOVER LOG ===="
-        proot-distro login debian --shared-tmp -- tail -20 /root/logs/auto_recover.log 2>/dev/null
-        ;;
-    list)
-        echo ""
-        echo "WEBSITES:"
-        run "for f in /etc/nginx/sites-enabled/*; do
-            [ -f \"\$f\" ] && grep -m1 'server_name' \"\$f\" | \
-            awk '{print \"  â†’ https://\"\$2}' | tr -d ';'
-        done"
-        echo ""
-        ;;
-    delete)
-        DOMAIN=$1
-        if [ -z "$DOMAIN" ]; then
-            echo "Sites hiá»‡n cÃ³:"
-            run "ls /etc/nginx/sites-enabled/ 2>/dev/null | sed 's/\.conf//g; s/-/./g'"
-            read -p "Nháº­p Domain cáº§n xÃ³a: " DOMAIN
-        fi
-        SITE_NAME=$(echo "$DOMAIN" | sed 's/\./-/g')
-        echo "XÃ³a Website: $DOMAIN"
-        read -p "Cháº¯c cháº¯n? (y/n): " OK
-        [ "$OK" != "y" ] && exit 0
-
-        run "
-            rm -f /etc/nginx/sites-enabled/${SITE_NAME}.conf
-            rm -f /etc/nginx/sites-available/${SITE_NAME}.conf
-            nginx -s reload 2>/dev/null || true
-            rm -rf /var/www/${SITE_NAME}
-            python3 << PYTHON
-import yaml, os
-config_path = os.path.expanduser('~/.cloudflared/config.yml')
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    if config and 'ingress' in config:
-        config['ingress'] = [r for r in config['ingress']
-                             if r.get('hostname') not in ['$DOMAIN', 'www.$DOMAIN']]
-        with open(config_path, 'w') as f:
-            yaml.dump(config, f, default_flow_style=False)
-PYTHON
-            pkill -HUP cloudflared 2>/dev/null || true
-            echo 'ÄÃ£ xÃ³a website vÃ  dá»n tunnel config.'
-            echo 'VÃ o Cloudflare Dashboard Ä‘á»ƒ xÃ³a DNS record thá»§ cÃ´ng.'
-        "
-        ;;
-    logs)
-        SERVICE=${1:-cloudflared}
-        run "tail -f /root/logs/${SERVICE}.log"
-        ;;
-    ""|menu)
-        while true; do
-            clear
-            echo "  â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"
-            echo "  â•‘         ANDROID VPS CONTROL PANEL v4.0           â•‘"
-            echo "  â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
-            echo -e "${CYAN}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
-            echo "  1. Khá»Ÿi Ä‘á»™ng Server        6. Danh sÃ¡ch Websites"
-            echo "  2. Dá»«ng Server             7. XÃ³a Website"
-            echo "  3. Xem Tráº¡ng thÃ¡i          8. Backup Telegram"
-            echo "  4. Monitor Real-time       9. Xem Log (Debug)"
-            echo "  5. Táº¡o Website má»›i        10. Má»Ÿ Tmux (Attach)"
-            echo "                             11. Tá»‘i Æ°u hiá»‡u nÄƒng"
-            echo "                             0. ThoÃ¡t"
-            echo -e "${CYAN}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
-            echo ""
-            read -p "Chá»n chá»©c nÄƒng (0-11): " OPT
-            case $OPT in
-                1) vps start; sleep 2 ;;
-                2) vps stop; sleep 2 ;;
-                3) vps status; echo ""; read -p "Báº¥m Enter Ä‘á»ƒ vá» Menu..." ;;
-                4) vps monitor ;;
-                5) vps create; echo ""; read -p "Báº¥m Enter Ä‘á»ƒ vá» Menu..." ;;
-                6) vps list; echo ""; read -p "Báº¥m Enter Ä‘á»ƒ vá» Menu..." ;;
-                7) vps delete; echo ""; read -p "Báº¥m Enter Ä‘á»ƒ vá» Menu..." ;;
-                8) vps backup; sleep 2 ;;
-                9) vps debug; echo ""; read -p "Báº¥m Enter Ä‘á»ƒ vá» Menu..." ;;
-                10) vps attach ;;
-                11) vps optimize ;;
-                0) exit 0 ;;
-                *) echo "Lá»±a chá»n khÃ´ng há»£p lá»‡."; sleep 1 ;;
-            esac
-        done
-        ;;
-    *)
-        echo "Lá»‡nh khÃ´ng há»£p lá»‡. GÃµ 'vps' Ä‘á»ƒ má»Ÿ Menu."
-        ;;
+    *)       echo "Gõ 'vps start' hoặc 'vps status' để bắt đầu." ;;
 esac
 VPS
-
     chmod +x "$PREFIX/bin/vps"
-    log "Lá»‡nh 'vps' xong!"
 }
 
 # ============================================================
@@ -1663,19 +733,9 @@ VPS
 main() {
     clear
     banner
-
-    echo -e "${YELLOW}CÃ i Ä‘áº·t Android VPS Stack v4.0${NC}"
-    echo ""
-    echo "  â€¢ Nginx + PHP-FPM 8.4 (nháº¹ hÆ¡n Apache)"
-    echo "  â€¢ MariaDB (auth má»›i: vps_admin user)"
-    echo "  â€¢ Redis + WP-CLI + Node.js 20"
-    echo "  â€¢ PostgreSQL (Debian, khÃ´ng cáº§n systemd)"
-    echo "  â€¢ Cloudflare Tunnel"
-    echo "  â€¢ Auto Recovery + Health Check + Backup Telegram"
-    echo "  â€¢ Fix: MariaDB auth, PostgreSQL proot, menu khÃ´ng vÄƒng"
-    echo ""
-    read -p "Báº¯t Ä‘áº§u cÃ i Ä‘áº·t? (y/n): " CONFIRM
-    [[ "$CONFIRM" != "y" ]] && echo "Há»§y." && exit 0
+    echo "Cài đặt Android VPS Stack v4.0 Final"
+    read -p "Bắt đầu? (y/n): " CONFIRM
+    [[ "$CONFIRM" != "y" ]] && exit 0
 
     step1_termux
     step2_debian
@@ -1687,58 +747,8 @@ main() {
     step8_boot
     step9_vps_command
 
-    section "âœ… CÃ€I Äáº¶T HOÃ€N Táº¤T v4.0"
-    echo ""
-    echo -e "${GREEN}Lá»‡nh quan trá»ng:${NC}"
-    echo ""
-    echo -e "  ${CYAN}vps start${NC}                Khá»Ÿi Ä‘á»™ng server"
-    echo -e "  ${CYAN}vps status${NC}               Tráº¡ng thÃ¡i services"
-    echo -e "  ${CYAN}vps monitor${NC}              Real-time monitor"
-    echo -e "  ${CYAN}vps create${NC}               Táº¡o WordPress / NextJS / Static"
-    echo -e "  ${CYAN}vps db shell${NC}             VÃ o MariaDB"
-    echo -e "  ${CYAN}vps pg shell${NC}             VÃ o PostgreSQL"
-    echo -e "  ${CYAN}vps wp example.com help${NC}  WP-CLI"
-    echo -e "  ${CYAN}vps debug${NC}                Xem log lá»—i"
-    echo -e "  ${CYAN}vps backup${NC}               Backup Telegram"
-    echo -e "  ${CYAN}vps optimize${NC}             Tá»‘i Æ°u Performance"
-    echo ""
-    echo -e "${YELLOW}Thay Ä‘á»•i chÃ­nh so vá»›i v3.0:${NC}"
-    echo "  âœ“ MariaDB: dÃ¹ng vps_admin user thay vÃ¬ root (fix ERROR 1698)"
-    echo "  âœ“ PostgreSQL: pg_ctl trá»±c tiáº¿p, khÃ´ng cáº§n systemd"
-    echo "  âœ“ create-site: dÃ¹ng return thay exit â†’ khÃ´ng vÄƒng menu"
-    echo "  âœ“ WP plugins: retry logic, báº¯t lá»—i Ä‘Ãºng cÃ¡ch"
-    echo "  âœ“ ThÃªm: vps pg (PostgreSQL helper)"
-    echo ""
-
-    # ThÃ´ng tin SSH
-    PHONE_IP=$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || \
-               ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -1)
-    SSH_USER=$(whoami)
-
-    echo -e "${BLUE}â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”${NC}"
-    echo -e "${CYAN}  THÃ”NG TIN Káº¾T Ná»I SSH (Bitvise SSH Client)    ${NC}"
-    echo -e "${BLUE}â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”${NC}"
-    echo ""
-    echo -e "  Host     : ${GREEN}${PHONE_IP:-<IP Ä‘iá»‡n thoáº¡i>}${NC}"
-    echo -e "  Port     : ${GREEN}8022${NC}"
-    echo -e "  Username : ${GREEN}${SSH_USER}${NC}"
-    echo -e "  Password : ${GREEN}<password báº¡n vá»«a Ä‘áº·t lÃºc cÃ i>${NC}"
-    echo ""
-    echo -e "  ${YELLOW}MÃ¡y tÃ­nh vÃ  Ä‘iá»‡n thoáº¡i pháº£i cÃ¹ng WiFi${NC}"
-    echo -e "${BLUE}â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”${NC}"
-    echo ""
-
-    read -p "Khá»Ÿi Ä‘á»™ng server ngay? (y/n): " START_NOW
-    if [[ "$START_NOW" == "y" ]]; then
-        vps restart
-    fi
-
-    echo ""
-    log "Done! GÃµ 'vps create' Ä‘á»ƒ táº¡o site Ä‘áº§u tiÃªn."
-    echo ""
-    read -n 1 -s -r -p "Báº¥m phÃ­m báº¥t ká»³ Ä‘á»ƒ vÃ o Menu Ä‘iá»u khiá»ƒn VPS..."
-    echo ""
-    vps
+    section "CÀI ĐẶT HOÀN TẤT!"
+    echo "Sử dụng lệnh 'vps start' để bắt đầu."
 }
 
 main
