@@ -5,7 +5,7 @@ Stack tối ưu chạy trên Termux (Android): **Nginx + PHP 8.4 + MariaDB + Red
 ## 🚀 Cài đặt nhanh
 Mở Termux và dán lệnh sau:
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/hvdanhdev/hvdanh/main/install.sh && bash install.sh
+pkg update -y && pkg install -y wget && wget -O install.sh https://raw.githubusercontent.com/hvdanhdev/hvdanh/main/install.sh && bash install.sh
 ```
 
 ## 🛠 Lệnh điều khiển VPS (vps command)
