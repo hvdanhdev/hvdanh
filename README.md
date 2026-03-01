@@ -1,75 +1,75 @@
-# Android VPS Installer v4.0
+﻿# Android VPS Installer v4.0
 
-## Stack đầy đủ và Cải tiến v4.0
-| Service | Vai trò | Trạng thái v4.0 |
+## Stack Ä‘áº§y Ä‘á»§ vÃ  Cáº£i tiáº¿n v4.0
+| Service | Vai trÃ² | Tráº¡ng thÃ¡i v4.0 |
 |---------|---------|-----------------|
-| Nginx + PHP-FPM | Web server | Có menu Optimize (OpCache/FPM) |
+| Nginx + PHP-FPM | Web server | CÃ³ menu Optimize (OpCache/FPM) |
 | MariaDB | Database WP | **Fix ERROR 1698** (vps_admin user) |
-| Redis | Object cache | Tự động cài plugin WP |
-| Node.js 20 | NextJS projects | Sẵn sàng cho production |
-| PostgreSQL | Database | **Chạy Native Termux** (Ổn định hơn) |
-| Cloudflare Tunnel | Kết nối | Fix DNS routing thông minh |
-| vps setup-wp | Tự động hóa | Cài WP Core + Plugin 1-click |
+| Redis | Object cache | Tá»± Ä‘á»™ng cÃ i plugin WP |
+| Node.js 20 | NextJS projects | Sáºµn sÃ ng cho production |
+| PostgreSQL | Database | **Cháº¡y Native Termux** (á»”n Ä‘á»‹nh hÆ¡n) |
+| Cloudflare Tunnel | Káº¿t ná»‘i | Fix DNS routing thÃ´ng minh |
+| vps setup-wp | Tá»± Ä‘á»™ng hÃ³a | CÃ i WP Core + Plugin 1-click |
 
 ---
 
-## Lưu ý Quan trọng trước khi cài đặt (DNS & Cloudflare)
-Để hệ thống hoạt động trơn tru ngay lần đầu, bạn **CẦN** thực hiện các bước sau trên Dashboard Cloudflare:
+## LÆ°u Ã½ Quan trá»ng trÆ°á»›c khi cÃ i Ä‘áº·t (DNS & Cloudflare)
+Äá»ƒ há»‡ thá»‘ng hoáº¡t Ä‘á»™ng trÆ¡n tru ngay láº§n Ä‘áº§u, báº¡n **Cáº¦N** thá»±c hiá»‡n cÃ¡c bÆ°á»›c sau trÃªn Dashboard Cloudflare:
 
-1. **Trỏ NameServers**: Đảm bảo tên miền của bạn đã trỏ về DNS của Cloudflare.
-2. **Xóa Record cũ**: Xóa **TẤT CẢ** các bản ghi `A`, `AAAA`, hoặc `CNAME` cũ của tên miền (và các subdomain) mà bạn định dùng. 
-   - *Tại sao?* Nếu còn record cũ, Cloudflare Tunnel sẽ không thể tự động đè lên, dẫn đến lỗi kết nối (Error 1033).
-3. **SSL/TLS**: Chỉnh chế độ thành **Full** hoặc **Full (Strict)** để tránh lỗi vòng lặp redirect.
+1. **Trá» NameServers**: Äáº£m báº£o tÃªn miá»n cá»§a báº¡n Ä‘Ã£ trá» vá» DNS cá»§a Cloudflare.
+2. **XÃ³a Record cÅ©**: XÃ³a **Táº¤T Cáº¢** cÃ¡c báº£n ghi `A`, `AAAA`, hoáº·c `CNAME` cÅ© cá»§a tÃªn miá»n (vÃ  cÃ¡c subdomain) mÃ  báº¡n Ä‘á»‹nh dÃ¹ng. 
+   - *Táº¡i sao?* Náº¿u cÃ²n record cÅ©, Cloudflare Tunnel sáº½ khÃ´ng thá»ƒ tá»± Ä‘á»™ng Ä‘Ã¨ lÃªn, dáº«n Ä‘áº¿n lá»—i káº¿t ná»‘i (Error 1033).
+3. **SSL/TLS**: Chá»‰nh cháº¿ Ä‘á»™ thÃ nh **Full** hoáº·c **Full (Strict)** Ä‘á»ƒ trÃ¡nh lá»—i vÃ²ng láº·p redirect.
 
 ---
 
-## Cài đặt
+## CÃ i Ä‘áº·t
 
-### Máy mới - chạy 1 lệnh duy nhất
+### MÃ¡y má»›i - cháº¡y 1 lá»‡nh duy nháº¥t
 ```bash
 pkg update -y && pkg install -y wget && wget -O install.sh https://raw.githubusercontent.com/hvdanhdev/hvdanh/main/install.sh && bash install.sh
 ```
 
-**Các bước sau khi cài:**
-1. Chạy lệnh: `vps`
-2. Tạo website: Chọn **Số 5**.
-3. Cài WordPress hoàn chỉnh: Chạy `vps setup-wp <domain>`.
-4. (Tùy chọn) Cài PostgreSQL/ChromaDB: Chọn **Số 12**.
+**CÃ¡c bÆ°á»›c sau khi cÃ i:**
+1. Cháº¡y lá»‡nh: `vps`
+2. Táº¡o website: Chá»n **Sá»‘ 5**.
+3. CÃ i WordPress hoÃ n chá»‰nh: Cháº¡y `vps setup-wp <domain>`.
+4. (TÃ¹y chá»n) CÃ i PostgreSQL/ChromaDB: Chá»n **Sá»‘ 12**.
 
 ---
 
-## Lệnh vps (Control Panel)
+## Lá»‡nh vps (Control Panel)
 
-### Quản lý Hệ thống
+### Quáº£n lÃ½ Há»‡ thá»‘ng
 ```bash
-vps start          # Khởi động TẤT CẢ (Debian + Native PG/Chroma)
-vps stop           # Dừng TẤT CẢ an toàn
-vps status         # Trạng thái Real-time (Xanh = Chạy, Đỏ = Dừng)
-vps monitor        # Dashboard giám sát RAM/CPU/Disk
-vps optimize       # Menu tối ưu OpCache và PHP-FPM (Số 11)
-vps native         # Menu quản lý PostgreSQL (Số 12)
+vps start          # Khá»Ÿi Ä‘á»™ng Táº¤T Cáº¢ (Debian + Native PG/Chroma)
+vps stop           # Dá»«ng Táº¤T Cáº¢ an toÃ n
+vps status         # Tráº¡ng thÃ¡i Real-time (Xanh = Cháº¡y, Äá» = Dá»«ng)
+vps monitor        # Dashboard giÃ¡m sÃ¡t RAM/CPU/Disk
+vps optimize       # Menu tá»‘i Æ°u OpCache vÃ  PHP-FPM (Sá»‘ 11)
+vps native         # Menu quáº£n lÃ½ PostgreSQL (Sá»‘ 12)
 ```
 
-### Quản lý Website & WordPress
+### Quáº£n lÃ½ Website & WordPress
 ```bash
-vps create         # Wizard tạo Website mới (WP, NextJS, Static)
-vps setup-wp <dom> # Cài đặt WP Core, Admin, Plugin tự động
-vps wp <dom> help  # Sử dụng WP-CLI cho website chỉ định
-vps list           # Danh sách các website đang hoạt động
-vps delete <dom>   # Xóa website và dọn dẹp Tunnel DNS
+vps create         # Wizard táº¡o Website má»›i (WP, NextJS, Static)
+vps setup-wp <dom> # CÃ i Ä‘áº·t WP Core, Admin, Plugin tá»± Ä‘á»™ng
+vps wp <dom> help  # Sá»­ dá»¥ng WP-CLI cho website chá»‰ Ä‘á»‹nh
+vps list           # Danh sÃ¡ch cÃ¡c website Ä‘ang hoáº¡t Ä‘á»™ng
+vps delete <dom>   # XÃ³a website vÃ  dá»n dáº¹p Tunnel DNS
 ```
 
 ### Database & Backup
 ```bash
-vps db <shell|list|create|export|import>  # Quản lý MariaDB
-vps pg <shell|list|create|drop>           # Quản lý PostgreSQL
-vps backup                                # Backup mọi thứ lên Telegram
+vps db <shell|list|create|export|import>  # Quáº£n lÃ½ MariaDB
+vps pg <shell|list|create|drop>           # Quáº£n lÃ½ PostgreSQL
+vps backup                                # Backup má»i thá»© lÃªn Telegram
 ```
 
 ---
 
-## Hướng dẫn cài đặt thủ công (Dự phòng)
-Nếu script cài đặt gặp lỗi ở các dịch vụ Native (thường do môi trường Termux thiếu thư viện), bạn có thể cài thủ công bằng các lệnh sau:
+## HÆ°á»›ng dáº«n cÃ i Ä‘áº·t thá»§ cÃ´ng (Dá»± phÃ²ng)
+Náº¿u script cÃ i Ä‘áº·t gáº·p lá»—i á»Ÿ cÃ¡c dá»‹ch vá»¥ Native (thÆ°á»ng do mÃ´i trÆ°á»ng Termux thiáº¿u thÆ° viá»‡n), báº¡n cÃ³ thá»ƒ cÃ i thá»§ cÃ´ng báº±ng cÃ¡c lá»‡nh sau:
 
 ### 1. PostgreSQL (Native)
 ```bash
@@ -80,36 +80,36 @@ pg_ctl -D $PREFIX/var/lib/postgresql start
 
 ---
 
-## Cấu trúc thư mục (Trong Debian)
-Dữ liệu web và scripts quản lý nằm trong Debian (`proot-distro login debian`):
-- `/var/www/` : Chứa mã nguồn các website.
-- `/root/scripts/` : Các file thực thi quản lý dịch vụ.
-- `/root/logs/` : Nơi kiểm tra khi có lỗi (vps debug).
-- `/root/.vps_config` : Chứa cấu hình Tunnel và Telegram.
+## Cáº¥u trÃºc thÆ° má»¥c (Trong Debian)
+Dá»¯ liá»‡u web vÃ  scripts quáº£n lÃ½ náº±m trong Debian (`proot-distro login debian`):
+- `/var/www/` : Chá»©a mÃ£ nguá»“n cÃ¡c website.
+- `/root/scripts/` : CÃ¡c file thá»±c thi quáº£n lÃ½ dá»‹ch vá»¥.
+- `/root/logs/` : NÆ¡i kiá»ƒm tra khi cÃ³ lá»—i (vps debug).
+- `/root/.vps_config` : Chá»©a cáº¥u hÃ¬nh Tunnel vÃ  Telegram.
 
 ---
 
-## Luồng hoạt động của Website (Workflow)
+## Luá»“ng hoáº¡t Ä‘á»™ng cá»§a Website (Workflow)
 
 ### 1. Website WordPress
-Khi người dùng truy cập `https://example.com`:
-1. **Trình duyệt** gửi yêu cầu tới **Cloudflare** (SSL/TLS).
-2. **Cloudflare** chuyển hướng yêu cầu vào **Cloudflare Tunnel** (Mã hóa).
-3. **Cloudflared (Termux)** nhận yêu cầu và đẩy vào **Nginx (Debian Proot)**.
-4. **Nginx** xử lý:
-   - Nếu là file tĩnh (ảnh, css, js): Trả về ngay (Cache 30 ngày).
-   - Nếu là mã PHP: Đẩy sang **PHP-FPM 8.4**.
-5. **PHP-FPM** truy vấn dữ liệu từ **MariaDB** và **Redis Cache**.
-6. Kết quả được trả ngược lại cho người dùng.
+Khi ngÆ°á»i dÃ¹ng truy cáº­p `https://example.com`:
+1. **TrÃ¬nh duyá»‡t** gá»­i yÃªu cáº§u tá»›i **Cloudflare** (SSL/TLS).
+2. **Cloudflare** chuyá»ƒn hÆ°á»›ng yÃªu cáº§u vÃ o **Cloudflare Tunnel** (MÃ£ hÃ³a).
+3. **Cloudflared (Termux)** nháº­n yÃªu cáº§u vÃ  Ä‘áº©y vÃ o **Nginx (Debian Proot)**.
+4. **Nginx** xá»­ lÃ½:
+   - Náº¿u lÃ  file tÄ©nh (áº£nh, css, js): Tráº£ vá» ngay (Cache 30 ngÃ y).
+   - Náº¿u lÃ  mÃ£ PHP: Äáº©y sang **PHP-FPM 8.4**.
+5. **PHP-FPM** truy váº¥n dá»¯ liá»‡u tá»« **MariaDB** vÃ  **Redis Cache**.
+6. Káº¿t quáº£ Ä‘Æ°á»£c tráº£ ngÆ°á»£c láº¡i cho ngÆ°á»i dÃ¹ng.
 
-### 2. Website NextJS (Dự án AI)
-Khi người dùng truy cập `https://api.example.com`:
-1. **Cloudflare & Tunnel** xử lý tương tự như WordPress.
-2. **Nginx (Debian Proot)** đóng vai trò **Reverse Proxy**, đẩy yêu cầu tới port của ứng dụng (ví dụ: `localhost:3000`).
-3. **Node.js (NextJS App)** nhận yêu cầu và xử lý logic.
-4. **NextJS** có thể kết nối với **PostgreSQL (Native Termux)**: Lưu trữ dữ liệu quan hệ, CRM.
-5. Ứng dụng trả về kết quả cho trình duyệt.
+### 2. Website NextJS (Dá»± Ã¡n AI)
+Khi ngÆ°á»i dÃ¹ng truy cáº­p `https://api.example.com`:
+1. **Cloudflare & Tunnel** xá»­ lÃ½ tÆ°Æ¡ng tá»± nhÆ° WordPress.
+2. **Nginx (Debian Proot)** Ä‘Ã³ng vai trÃ² **Reverse Proxy**, Ä‘áº©y yÃªu cáº§u tá»›i port cá»§a á»©ng dá»¥ng (vÃ­ dá»¥: `localhost:3000`).
+3. **Node.js (NextJS App)** nháº­n yÃªu cáº§u vÃ  xá»­ lÃ½ logic.
+4. **NextJS** cÃ³ thá»ƒ káº¿t ná»‘i vá»›i **PostgreSQL (Native Termux)**: LÆ°u trá»¯ dá»¯ liá»‡u quan há»‡, CRM.
+5. á»¨ng dá»¥ng tráº£ vá» káº¿t quáº£ cho trÃ¬nh duyá»‡t.
 
 ---
-**Duy trì bởi hvdanhdev**
-**Phiên bản: 4.0 (Ổn định nhất cho Android VPS)**
+**Duy trÃ¬ bá»Ÿi hvdanhdev**
+**PhiÃªn báº£n: 4.0 (á»”n Ä‘á»‹nh nháº¥t cho Android VPS)**
